@@ -1,0 +1,161 @@
+WINDOW
+!00000017
+: window windowdemo ;
+-*-
+v
+SCROLL
+!0000014D
+: scroll
+  0 0        \ es:ds si:di
+  4 pick 8 shl     \ dh
+  6 pick + 8 shl   \ dl
+  7 pick + 8 shl   \ ch
+  8 pick +         \ cl
+  4 pick 16 shl    \ bh bl->0
+  4 pick 0< if 7 + 8 shl 4 pick negate +
+            else 6 + 8 shl 4 pick +    endif
+  16 int
+  drop drop drop drop drop
+  drop drop drop drop drop drop
+  ;
+-*-
+>
+W1COLOR
+!00000015
+31 constant w1color
+-*-
+>
+W2COLOR
+!00000015
+79 constant w2color
+-*-
+>
+W3COLOR
+!00000016
+121 constant w3color
+-*-
+>
+W1SCRL
+!0000002B
+: w1scrl
+  1 1 38 10 w1color 1 scroll
+;
+-*-
+>
+W2SCRL
+!0000002D
+: w2scrl
+  41 1 78 10 w2color 1 scroll
+ ;
+-*-
+>
+W3SCRL
+!0000002E
+: w3scrl
+  1 13 78 22 w3color -1 scroll
+ ;
+-*-
+>
+WINDOWS
+!00000067
+: windows
+  0  0 39 11 w1color 0 wbox
+  40 0 79 11 w2color 0 wbox
+  0 12 79 23 w3color 0 wbox
+  ;
+-*-
+v
+ULCORN
+!00000015
+201 constant ulcorn
+-*-
+>
+URCORN
+!00000015
+187 constant urcorn
+-*-
+>
+LLCORN
+!00000015
+200 constant llcorn
+-*-
+>
+LRCORN
+!00000015
+188 constant lrcorn
+-*-
+>
+HSIDE
+!00000014
+205 constant hside
+-*-
+>
+VSIDE
+!00000014
+186 constant vside
+-*-
+>
+WBOX
+!00000197
+: wbox
+  5 pick 5 pick 5 pick 5 pick 5 pick 0 scroll
+  5 pick 5 pick gotoxy ulcorn emit
+  3 pick 6 pick - 1- 0 do hside emit loop
+  urcorn emit
+  2 pick 5 pick - 1- 5 pick + 1+ 5 pick 1+
+   do
+      5 pick i gotoxy vside emit
+      3 pick i gotoxy vside emit
+   loop
+  5 pick 3 pick gotoxy llcorn emit
+  3 pick 6 pick - 1- 0 do hside emit loop
+  lrcorn emit
+  drop drop drop drop drop drop
+;
+-*-
+^
+>
+SAVEAREA
+!0000001C
+create savearea 4000 allot
+-*-
+>
+SAVEIT
+!0000002A
+: saveit
+  screen savearea 4000 move
+;
+-*-
+>
+RESTOREIT
+!0000002D
+: restoreit
+  savearea screen 4000 move
+;
+-*-
+>
+WINDOWDEMO
+!000001B4
+: windowdemo
+  saveit
+  windows
+  100 0 do
+    1 10 gotoxy
+    ."   Line " i .
+    ." This window is window 1"
+    w1scrl
+    41 10 gotoxy
+    ."   Line " i .
+    ." This window is window 2"
+    w2scrl
+    1 13 gotoxy
+    ."   Line " i .
+    ." This is window 3 this is window 3 this is window 3 this is window 3"
+    w3scrl
+    ?term if restoreit 0 23 gotoxy abort endif
+  loop
+  restoreit
+  0 23 gotoxy abort
+  ;
+-*-
+^

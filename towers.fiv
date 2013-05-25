@@ -1,0 +1,187 @@
+HANOI
+!00000140
+: hanoi
+  depth 1 < if
+    cr cr
+    ."                  Hanoi expects the number of pieces on the stack." cr
+    ."                  For example, to solve a five piece towers of hanoi " cr
+    ."                  puzzle, type: " cr cr
+    ."                         5 HANOI" cr cr
+    exit
+  endif
+  towers ;
+-*-
+v
+(N)
+!0000000E
+variable (N)
+-*-
+>
+N
+!0000000D
+: N (N) @ ;
+-*-
+>
+RING
+!0000001C
+variable ring
+12 1+ allot
+-*-
+>
+POS
+!0000003C
+ : POS
+( location pos -> coordinate )
+  N N + 1+ * N + ;
+-*-
+>
+HALFDISPLAY
+!00000043
+ : HALFDISPLAY
+( color size --- )
+  0 DO DUP EMIT LOOP DROP ;
+
+-*-
+>
+<DISPLAY>
+!00000087
+ : <DISPLAY>
+( line color size --- )
+  stack ab|abab HALFDISPLAY stack abc|bca 3 < IF 32 ELSE 186 ( | )
+  ENDIF EMIT HALFDISPLAY ;
+-*-
+>
+DISPLAY
+!000000A0
+ : DISPLAY
+( size pos line color --- )
+  SWAP >R stack abc|caba - R@ ( color size pos-size line )
+  GOTOXY R> ( color size line ) stack abc|cab <DISPLAY> ;
+-*-
+>
+PRESENCE
+!00000049
+ : PRESENCE
+( tower ring presence -> boolean )
+  RING + C@ = negate ;
+-*-
+>
+LINE
+!0000007B
+ : LINE
+( tower line -> display-line-of-top )
+  4 SWAP N 0 DO DUP I PRESENCE 0= negate stack abc|bca + SWAP LOOP DROP ;
+-*-
+>
+RAISE
+!00000092
+ : RAISE
+( size tower --- )
+  DUP POS SWAP LINE 2 SWAP DO
+  stack ab|abab I 32 DISPLAY stack ab|abab I 1- 205 DISPLAY
+  -1 +LOOP drop DROP ;
+-*-
+>
+LOWER
+!0000008C
+ : LOWER
+( size tower --- )
+  DUP POS SWAP LINE 1+ 2 DO
+  stack ab|abab I 1- 32 DISPLAY stack ab|abab I 205 DISPLAY
+  LOOP drop DROP ;
+-*-
+>
+MOVELEFT
+!0000008C
+ : MOVELEFT
+( size source.tower destiny.tower --- )
+  POS    SWAP POS 1- DO DUP I 1+ 1 32 DISPLAY
+  DUP I 1 205 DISPLAY -1 +LOOP DROP ;
+-*-
+>
+MOVERIGHT
+!00000089
+ : MOVERIGHT
+( size source.tower destiny.tower --- )
+  POS 1+ SWAP POS 1+ DO DUP I 1- 1 32 DISPLAY
+  DUP I 1 205 DISPLAY LOOP DROP ;
+-*-
+>
+TRAVERSE
+!0000006C
+ : TRAVERSE
+( size source.tower destiny.tower --- )
+  stack ab|abab > IF MOVELEFT ELSE MOVERIGHT ENDIF ;
+-*-
+>
+MOVE
+!000000CC
+ : MOVE
+( size source.tower destiny.tower --- )
+  ?TERM if key 32 = not if 0 N 4 + GOTOXY ABORT endif endif
+  stack abc|cabab RAISE stack abc|abbca TRAVERSE
+  stack ab|abab RING + 1- C! SWAP LOWER ;
+-*-
+>
+MULTIMOV
+!000000D1
+ : MULTIMOV
+( size source destiny spare --- )
+  3 PICK 1 = IF DROP MOVE ELSE
+  stack abcd|bcda 1- stack abcd|dabcdacb MULTIMOV
+  stack abcd|abcdbca 1+ stack abc|cab MOVE
+  stack abc|cba MULTIMOV ENDIF ;
+-*-
+>
+MAKETOWER
+!00000051
+ : MAKETOWER
+( tower --- )
+  POS 4 N + 3 DO DUP I GOTOXY 186 EMIT LOOP DROP ;
+-*-
+>
+MAKEBASE
+!00000050
+ : MAKEBASE
+( no arguments )
+  0 N 4 + GOTOXY N 6 * 3 + 0 DO 177 EMIT LOOP ;
+-*-
+>
+MAKERING
+!0000004C
+ : MAKERING
+( tower size --- )
+  stack ab|abab RING + 1- C! SWAP LOWER ;
+-*-
+>
+SETUP
+!0000008D
+ : SETUP ( no arguments )
+  CLS
+  N 1+ 0 DO 1 RING I + C! LOOP
+  3 0 DO I MAKETOWER LOOP
+  MAKEBASE
+  1 N DO 0 I MAKERING -1 +LOOP
+ ;
+-*-
+>
+TOWERS
+!000000DD
+ : TOWERS
+( quantity --- )
+  1 MAX 12 MIN (N) !
+  SETUP
+  3 0 GOTOXY ." Fifth Demo press <esc> to quit"
+  N 2 0 1
+  BEGIN
+  OVER POS N 4 + GOTOXY
+  stack abcd|acdbacdb MULTIMOV
+  2 0 do 7 emit loop
+  0 UNTIL ;
+-*-
+>
+DEMO
+!00000012
+: demo 5 hanoi ;
+-*-
+^

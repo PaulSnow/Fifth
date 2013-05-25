@@ -1,0 +1,3816 @@
+BUILD
+!0000002E
+\ Build a helpfile.  Version 4
+create build
+-*-
+v
+CROSS
+!0000030C
+\ ( -> addr-to-save-length addr-of-text-start )
+\ CROSS creates a cross reference to another entry in the help file.
+: cross
+  create                 \ Create the module
+  66666666 ,             \ Give it a tag.
+  here h# FFFF0000 and , \ Save local Module Address      *
+  0 ,                    \ Save room for length of entry. *
+  32 word dup c@ 0=      \ Insist that a name follows.
+  abort" Cross reference lacks the name specification"
+  dup c@ -2 do           \ Save the name away.
+    count c,
+  loop drop
+  0 , 0 ,
+does>
+  -1 abort" Executing a cross reference does not make sense!"
+;
+
+\ * -- Note: These items star'ed (*) above are not really necessary
+\            for a cross reference, but are done to be uniform with
+\            actual entries.
+-*-
+>
+|
+!000001B3
+: |
+  obvious               \ Does the easy stuff
+  addmenu addnames      \ Builds a menu followed by a list of names.
+  here swap -           \ Compute length of entry.
+  swap !                \ Patch up length of entry.
+                        \   cliff's bogusness
+does>
+  pooh!
+  ['] help comp         \ Force HELP to re-read the offset table, since
+;                       \ we may have just replaced the old help file.
+-*-
+v
+GET-NAME
+!000001BE
+\ ( module -> addr ) Takes the module address, checks for validity, and
+\ returns the address of the token's name.
+: get-name
+  >body                          \ Get the data area.
+  dup  @ dup  77777777 = not     \ Check the tag; if not a help file entry,
+         swap 66666666 = not and \   or cross reference, then bad module.
+  abort" Invalid child found! "  \ Blow if bad
+  12 +                           \ Increment to the name.
+;
+-*-
+>
+OBVIOUS
+!0000036C
+\ ( -> addr-to-save-length addr-of-text-start )
+\ Obvious creates the module, saves a tag, saves local executable addr,
+\ allocates 4 bytes (and returns this addr) for saving the length of the
+\ the entry, then saves the text (without the trailing null).
+: obvious
+  create                                \ Create the module
+  77777777 ,                            \ Give it a tag.
+  here h# FFFF0000 and ,                \ Save local Module Address
+  here 0 ,                              \ Save room for length of entry.
+  32 word dup c@ -2 do count c, loop drop          \ Save the name away.
+  here                                  \ Address of beginning of text.
+  >in @                                 \ Get the text pointer
+  begin dup c@@ ?dup while c, 1+ repeat \ Save the text.
+  >in !                                 \ Save pointer to end of text.
+;
+-*-
+>
+ADDMENU
+!00000405
+\ ( -> 8b ) addmenu builds a menu (if the module has any children).
+\ It returns a count of the number of items within the menu.
+: addmenu
+  0 here h# FFFF0000 and child        \ child count zero, get first child.
+  dup 0= if , , 0 exit endif          \ No children, compile two nulls.
+  begin ?dup while                    \ While not null, do
+    over 4 mod 0= if                  \ Skip to 1st col if needed.
+      13 c, 10 c, 4 0 do 32 c, loop   \ Add crlf and indention.
+    endif
+    over 65 + c, ` ) c, 32 c,         \ Add the letter.
+    swap 1+ swap                      \ Increment count of children.
+    dup get-name dup c@ 13 >          \ Check length restrictions
+    abort" Name too long"             \  and die if too long!
+    dup count 0 do count c, loop drop \ Compile in the name.
+    c@ 15 swap - 0 do 32 c, loop      \ Add spaces to next goto next column.
+    next                              \ Goto next child
+  repeat                              \ When done, leave item count on stk.
+;
+-*-
+>
+ADDNAMES
+!0000036A
+\ ( 8b -> ) addnames takes a count of the items in the menu and compiles
+\ a list of counted names. (This list is null terminated)
+: addnames
+  ?dup 0= if exit endif               \ No children, then we are done!
+  10 c, 13 c, 10 c, 13 c,             \ Add crlf
+  " Enter a letter for further help, or space to return. "
+  count -1 do count c, loop drop      \ Compile in friendly message and null.
+  ,                                   \ Save item count left on stk above.
+  here h# FFFF0000 and child          \ Get the child.
+  begin dup while
+    dup get-name                      \ Get the child's name
+    dup c@ -2 do count c, loop drop   \ Compile in the name
+    next                              \ Goto next child
+  repeat drop                         \ Drop child address.
+  0 , 0 ,                             \ End the list with a double null
+;
+-*-
+>
+POOH!
+!0000055E
+\ ( parameter-address -> )
+\ Takes the parameter address, builds the help file.
+\ This module does all the work associcated with writing everything out.
+: pooh!
+  0 ncnt !                      \ Set the count of entries to zero.
+  0 nlen !                      \ Set length of the names list.
+  " fifth.hlp" 1+ 32 createfile \ Open file, possibly destroying old file.
+  if h ! else                   \ Save file handle if everything ok.
+    1 abort" Open File Error"   \ Abort if everything not ok.
+  endif
+  "    " 4 h @ write err?       \ Write four bytes out for size of name list.
+  "    " 4 h @ write err?       \ Write four bytes out for count of entries.
+  dup 8 + wn                    \ Write out this man's name and length.
+  dup 4 + @ child wns           \ Get exec addr of 1st child & write'em out.
+  woffs                         \ Write out the file offsets.
+  4 + @ dup wt child wts        \ Write out this man's text, & all his child's.
+  0 1 h @ seek drop             \ Get current file position (used to reach EOF)
+  0 0 h @ seek err?             \ Move to file beginning
+  nlen 4 h @ write err?         \ Write out byte cnt of names.
+  ncnt 4 h @ write err?         \ Write out cnt of entries in help file.
+  0 h @ seek err?               \ Move back to end of file (EOF)
+  h @ close if else drop endif  \ Close the new help file
+;
+-*-
+v
+H
+!00000054
+\ Handle.  Holds the file handle for the help file under construction.
+variable h
+-*-
+>
+NLEN
+!00000066
+\ Name LENgth.  Holds a count of the sum length of all the names in the help
+\ file.
+variable nlen
+-*-
+>
+NCNT
+!00000048
+\ Name CouNT.  Count of all the names in the help file.
+variable ncnt
+-*-
+>
+ERR?
+!000000E1
+\ ( 32b1 flag -> )
+\ Checks for errors during file accesses (reads or writes).
+\ flag = true, no error, drop 32b1; otherwise abort and die!
+: err?
+  if drop else -1 abort" File Access Error (on read or write)." endif
+;
+-*-
+>
+NAMES
+!00000072
+\ Contains the file offsets to each entry in the help file.
+\ Limit of 2K entries.
+create names 2048 4 * allot
+-*-
+>
+WN
+!000001C4
+\ ( addr -> ) This is the address of the total length of the entry (4 bytes)
+\ followed by the module name. WN saves the offset into TABLE and writes out a
+\ single name.
+: wn
+  dup @ names ncnt @ 4 * + !    \ Save the length of this entry.
+  1 ncnt +!                     \ Increment the count of total entries.
+  4 + dup c@ 2 + dup nlen +!    \ Get name length and add to total length.
+  h @ write err?                \ Write out the name
+;
+-*-
+>
+WNS
+!00000222
+\ ( execution-addr -> )
+\ Writes out the name of the module with execution-addr, its children's and its
+\ brother's as well.
+: wns
+  ?dup 0= if exit endif         \ Check to see if null; if so, go away!
+  dup >body @ 66666666 = if     \ If this is a cross reference,
+    next wns exit               \   then ignore it.
+  endif
+  dup >body 8 + wn              \ Write out this man's name
+  dup child wns                 \ Write out this man's children's names.
+      next  wns                 \ Write out this man's brother's names.
+;
+-*-
+>
+WOFFS
+!000002C5
+\ ( -> ) Write OFFsetS. Each offset corresponds to an entry in the names
+\ list. We touch up the offsets to be relative to the beginning of the file.
+\                       nlen      ncnt
+: woffs         \ Bias=(4 bytes + 4 bytes + len(names) + ncnt*4 )
+  nlen @ 8 + ncnt @ 4 * +               \ Keep a bias on the top of stack.
+  ncnt @ 4 * names +   names do         \ DO's index is a pointer into names.
+    i @ over i ! +                      \ Add bias, THEN add length to bias.
+  4 +loop                               \ Increment to next entry.
+  drop                                  \ When all's said and done, drop bias.
+  names ncnt @ 4 * h @ write err?       \ Write out the offsets.
+;
+-*-
+>
+WT
+!0000012F
+\ ( execution-addr -> ) Write out the given module's text.
+: wt
+  >body                         \ Goto the data area.
+  dup 12 + c@ 14 + over +       \ Compute the start of the text.
+  swap 8 + @                    \ Get the length of the entry.
+  h @ write err?                \ Write it out.
+;
+-*-
+>
+WTS
+!00000237
+\ ( execution-addr -> )  Write TextS (text plural).
+\ Writes out the text of the module with execution-addr, its children's and its
+\ brother's as well.
+: wts
+  ?dup 0= if exit endif         \ Check to see if null; if so, go away!
+  dup >body @ 66666666 = if     \ If this is a cross reference,
+    next wts exit               \   ignore it.
+  endif
+  dup wt                        \ Write out this man's text
+  dup child wts                 \ Write out this man's children's text.
+      next  wts                 \ Write out this man's brother's text.
+;
+-*-
+^
+^
+>
+BUILD-HELP-FILE
+!00000585
+\ After making changes to BUILD-HELP-FILE and its children, remember to
+\ save your work! (Do your saves in the dictionary editor with BUILD as
+\ the local module (the module in the top left of your screen)).
+\
+\ To build a new help file, enter the dictionary editor and use the arrow
+\ keys to make this module, BUILD-HELP-FILE, the local module (the module
+\ whose name is displayed in the top left hand corner of the screen).
+\ Then press 'G' for go. This will build a help file reflecting any changes
+\ you have made to BUILD-HELP-FILE and its children.
+
+| build-help-file
+GEN-HELP
+General Help                                                      1-20-89
+
+The HELP module provides an easy to use quick reference on primitives in
+the system.  HELP can be called from the interactive mode by typing HELP
+followed by the module's name for which help is sought.
+
+Apropos HELP is available from within the text editor by placing the
+cursor on or before a module and pressing the F2 key.  This screen may be
+displayed from within the text editor by placing the cursor past the last
+module in the text.
+
+If F2 is pressed on a User defined module, the dictionary editor is called
+with the User defined module as the local module. When you leave the
+dictionary editor, you will return to the text editor.  (Be warned! An
+error before you return will cause the loss of the editing session.)
+-*-
+v
+NOTATION
+!0000041D
+| notation
+NOTATION
+Fifth is a powerful, truly functional language.  As such, the most important
+documentation is that of the inputs and outputs of each function.  We suggest
+the following notation be used on the first line of each module;  this
+notation is also used through out the help facility.
+
+( 32b1 32b2 -> 32b3 ) MOD returns the remainder 32b3 of 32b1 divided by 32b2.
+
+The inputs expected on the stack are given prior to the arrow, and the
+outputs are given after the arrow.  Each input is described by a type and
+a number (to make it unique).  The description of MOD given above says
+that MOD expects two 32 bit integers.  These two 32 bit integers are replaced
+by a third 32 bit integer.  This third integer is defined as the remainder
+left over when the first integer is divided by the second integer.
+
+We use the following types through out the help facility:
+ 8b - an 8 bit integer          addr   - a valid Fifth address
+16b - a 16 bit integer          flag   - a 32 bit integer, value 0 or -1
+32b - a 32 bit integer
+-*-
+v
+FNOTATION
+!0000001C
+cross fnotation F_NOTATION
+-*-
+^
+>
+ARITHMETIC
+!00000177
+| arithmetic
+
+arithmetic
+
+Fifth supports 32-bit integer arithmetic, i.e.  Fifth has a 32 bit stack.
+The floating point operators use their own stack and rely on the math
+coprocessor, and thus will not work on some systems.  (If your system lacks
+the math coprocessor, you will get a Math Coprocessor Missing error when you
+attempt to use a floating point operator.)
+-*-
+v
+INTEGERS
+!000000ED
+| integers
+
+INTEGERS
+Integers in Fifth are usually 32 bits in length.  This gives a effective
+range of -2147483648 to 2147483647.  Each element on Fifth's stack is 32 bits
+in length. Fifth provides the following integer operators.
+-*-
+v
++
+!0000003F
+| +
+
++
+(32b1 32b2 -> 32b3) Add 32b1 to 32b2 yielding 32b3.
+-*-
+>
+-
+!00000046
+| -
+
+-
+(32b1 32b2 -> 32b3) Subtract 32b2 from 32b1 yielding 32b3.
+-*-
+>
+*
+!00000051
+| *
+
+*
+(32b1 32b2 -> 32b3) Signed multiply of 32b1 times 32b2 yielding 32b3.
+-*-
+>
+/
+!00000092
+| /
+
+/
+(32b1 32b2 -> 32b3) Divide 32b1 by 32b2, leaving quotient 32b3. A numerical
+overflow will occur if 32b2 is zero or 32b3 out of range.
+-*-
+>
+1+
+!0000003A
+| 1+
+
+1+
+(32b1 -> 32b2) Increment 32b1 yielding 32b2.
+-*-
+>
+1-
+!0000003A
+| 1-
+
+1-
+(32b1 -> 32b2) Decrement 32b1 yielding 32b2.
+-*-
+>
+2+
+!00000039
+| 2+
+
+2+
+(32b1 -> 32b2) Add 2 to 32b1 yielding 32b2.
+-*-
+>
+2-
+!00000040
+| 2-
+
+2-
+(32b1 -> 32b2) Subtract 2 from 32b1 yielding 32b2.
+-*-
+>
+2/
+!0000004D
+| 2/
+
+2/
+(32b1 -> 32b2) Arithmetically shift 32b1 right 1 yielding 32b2.
+-*-
+>
+/MOD
+!000000CE
+| /MOD
+
+/MOD
+(32b1 32b2 -> 32b3 32b4) Divide 32b1 by 32b2, leaving quotient 32b4 and
+remainder 32b3. 32b3 has same sign as 32b2.  A numerical overflow will
+occur if 32b2 is zero or 32b4 out of range.
+-*-
+>
+ABS
+!0000004C
+| ABS
+
+ABS
+(32b -> u32b) Signed 32b is replaced by it's absolute value.
+-*-
+>
+MAX
+!0000005B
+| MAX
+
+MAX
+(32b1 32b2 -> 32b3) Leave the larger of 32b1 and 32b2 on the stack as 32b3.
+-*-
+>
+MIN
+!0000005B
+| MIN
+
+MIN
+(32b1 32b2 -> 32b3) Leave the lesser of 32b1 and 32b2 on the stack as 32b3.
+-*-
+>
+MOD
+!000000A7
+| MOD
+
+MOD
+(32b1 32b2 -> 32b3) Divide 32b1 by 32b2 yielding remainder 32b3. 32b3 has
+same sign as 32b2, forces an error if 32b2 is zero or quotient out of range.
+-*-
+>
+NEGATE
+!00000049
+| NEGATE
+
+NEGATE
+(32b1 -> 32b2) Two's complement 32b1 yielding 32b2.
+-*-
+>
+SHL
+!0000007D
+| SHL
+
+SHL
+(32b1 32b2 -> 32b3) 32b1 is shifted left 32b2 places, zeros are shifted in on
+the right. The result is 32b3.
+-*-
+>
+SHR
+!0000007D
+| SHR
+
+SHR
+(32b1 32b2 -> 32b3) 32b1 is shifted right 32b2 places, zeros are shifted in
+on the left. The result is 32b3.
+-*-
+>
+CSHR
+!0000009B
+| CSHR
+
+CSHR
+(32b1 32b2 -> 32b3) 32b1 is shifted right 32b2 bits. Bits shifted out on
+the right are shifted back in on the left.  32b3 is the result.
+-*-
+>
+CSHL
+!00000092
+| CSHl
+
+CSHL
+(32b1 32b2 -> 32b3) 32b1 is shifted left 32b2 bits.  Bits shifted off the left
+are shifted in on the right. The result is 32b3.
+-*-
+^
+>
+FLOAT
+!0000031A
+| float
+
+<FLOAT>
+Fifth provides floating point using the 8087 math coprocessor family.  If you
+do not have a math coprocessor, Fifth's floating point routines will not work
+on your machine.  To use the floating point routines, you must use the
+package called <FLOAT>.  See the help on PACKAGE.
+
+Fifth uses 80 bit floating point arithmetic internally, but current I/O is
+limited to 32 bit accuracy.  This gives six digits accuracy, with an exponent
+range of roughly +/- 10 to the 36.  All floating point operations work with
+the separate floating point stack.  This stack is limited to roughly 100
+10-byte floating point numbers.
+
+When using inline assembly with the 8087, you can treat the 8087 as having a
+very large stack - underflow and overflow errors are handled by Fifth.
+-*-
+v
+FNOTATION
+!000001E7
+| fnotation
+
+F_NOTATION
+When the parameters of a floating point primitive are displayed, the integer
+stack parameters will be shown as usual, with a separate display for the
+floating point numbers.  For example:
+
+        (f1 f2 -> f3) Adds two floating point numbers.
+
+implies that the operation does not effect the integer stack, while
+
+        (addr -> )
+        (f1 -> )  Stores a floating point value (10 bytes) at the address.
+
+implies that both stacks are effected.
+-*-
+>
+FOPERATORS
+!00000056
+| foperators
+
+FOPERATORS
+These are the basic floating point arithmetic operators:
+-*-
+v
+F+
+!0000003D
+| F+
+
+F+
+(f1 f2 -> f3 ) Adds two floating point numbers.
+-*-
+>
+F-
+!00000042
+| F-
+
+F-
+(f1 f2 -> f3 ) Subtracts two floating point numbers.
+-*-
+>
+F*
+!00000043
+| F*
+
+F*
+(f1 f2 -> f3 ) Multiplies two floating point numbers.
+-*-
+>
+F/
+!00000040
+| F/
+
+F/
+(f1 f2 -> f3 ) Divides two floating point numbers.
+-*-
+>
+F<
+!00000094
+| F<
+
+F<
+(f1 f2 -> )
+( -> flag ) Compares two floating point numbers.  If f1 is less than f2, flag
+is true (-1), otherwise flag is false (0).
+-*-
+>
+F>
+!00000097
+| F>
+
+F>
+(f1 f2 -> )
+( -> flag ) Compares two floating point numbers.  If f1 is greater than f2,
+flag is true (-1), otherwise flag is false (0).
+-*-
+>
+FSQRT
+!0000003D
+| FSQRT
+
+FSQRT
+(f1 -> f2) Returns the square root of f1.
+-*-
+>
+FEXP
+!00000045
+| FEXP
+
+FEXP
+(f1 -> f2) Returns e^X on floating point number f1.
+-*-
+>
+FLOG
+!0000003B
+| FLOG
+
+FLOG
+(f1 -> f2) Returns the natural log of f1.
+-*-
+>
+FSIN
+!00000046
+| FSIN
+
+FSIN
+(f1 -> f2) Returns the SINE of angle f1, in degrees.
+-*-
+>
+FCOS
+!00000048
+| FCOS
+
+FCOS
+(f1 -> f2) Returns the COSINE of angle f1, in degrees.
+-*-
+>
+FATAN
+!00000048
+| FATAN
+
+FATAN
+(f1 -> f2) Returns the arctangent of f1, in degrees.
+-*-
+>
+P->R
+!00000068
+| P->R
+
+P->R
+(theta radius -> x y) Converts polar coordinates to rectangular.
+Theta is in degrees.
+-*-
+>
+FTRANSFORM
+!000001EF
+| FTRANSFORM
+
+FTRANSFORM
+(addr -> )
+(f1 f2 f3 -> f1' f2' f3')
+Performs a 3x3 matrix transformation.  Addr points to 9 floating point values
+which define the matrix.  For example:
+        create ident
+        1. f, 0. f, 0. f,
+        0. f, 1. f, 0. f,
+        0. f, 0. f, 1. f,
+creates an identity matrix. Then
+        : x 1. 2. 3. ident ftransform f. f. f. ;
+transforms 1, 2 and 3 with the identity matrix (no change) and prints them.
+FTRANSFORM is useful for fast 3-D graphics.
+-*-
+^
+>
+FSTACK_OP
+!00000056
+| fstack_op
+
+FSTACK_OP
+These stack operators manipulate the floating point stack:
+-*-
+v
+FSWAP
+!00000048
+| FSWAP
+
+FSWAP
+(f1 f2 -> f2 f1) Top two stack elements are swapped.
+-*-
+>
+FOVER
+!00000055
+| FOVER
+
+FOVER
+(f1 f2 -> f1 f2 f1) Stack is modified according to stack diagram.
+-*-
+>
+FDUP
+!00000043
+| FDUP
+
+FDUP
+(f1 -> f1 f1) Duplicate the top-of-stack element.
+-*-
+>
+FDROP
+!0000004E
+| FDROP
+
+FDROP
+(f1 -> ) A floating point value is dropped from the stack.
+-*-
+>
+FSTACK_
+!0000030A
+| fstack_
+
+FSTACK (32b1 32b2 ... -> ... )
+
+fstack AB|ABAB          (f1 f2 -> f1 f2 f1 f2)
+fstack ABC|CAB          (f1 f2 f3 -> f3 f1 f2)
+fstack ABCDE|EE         (f1 f2 f3 f4 f5 -> f5 f5)
+
+Let me explain the last example.  A is deepest, E is on on the top of the
+stack on the `before' side of |.  On the after side, E is the only thing
+left; ABCD were all thrown away, and E is DUPed, giving two copies of E.
+
+FSTACK can simplify understanding of complicated stack manipulations.
+However, for simple operations it is quite a bit slower, e.g. use FDUP
+instead of FSTACK A|AA.
+
+FSTACK is limited to no more than 26 elements on the before side, no limit on
+the after side.  It is not case sensitive, but the letters on the before side
+must be in order "ABC..." .
+-*-
+^
+>
+FCONSTANT
+!000000AA
+| FCONSTANT
+
+FCONSTANT
+(f1 -> ) Next module in the input stream is compiled into the dictionary.
+Later execution of this name leaves f1 on the floating point stack.
+-*-
+>
+FVARIABLE
+!00000078
+| FVARIABLE
+
+FVARIABLE
+( -> ) The next module in the input stream is CREATE'd, and 10 bytes reserved
+for it's use.
+-*-
+>
+F!
+!00000058
+| f!
+
+F!
+(addr -> )
+(f1 -> ) Store floating point value (10 bytes) at the address.
+-*-
+>
+F@
+!00000057
+| f@
+
+F@
+(addr -> )
+( -> f1)  The floating point value at the address is fetched.
+-*-
+>
+F,
+!000001B1
+| F,
+
+F,
+(f1 -> ) Floating point comma
+ adds 10 bytes to the local module (the module currently under
+compilation) and initializes the 10 bytes to the value f1.  For example, a
+variable PI could be defined and initialized to 4.5 by the code:
+
+        create PI 3.14 f,
+
+The following code would print a the value of PI.
+
+        PI f@ f.
+
+The value of PI could be changed to 3.1417 by the code
+
+        3.1417 PI f!
+-*-
+>
+FLITERAL
+!00000076
+| FLITERAL
+
+FLITERAL
+(f1 -> ) Causes the top-of-stack value to be compiled just as if it where an
+inline number.
+-*-
+>
+PACKAGE
+!00000017
+cross package PACKAGE
+-*-
+^
+>
+F.
+!00000038
+| F.
+
+F.
+(f1 -> ) Prints the floating point number.
+-*-
+>
+F->EM
+!000000F0
+| F->EM
+
+F->EM
+( -> 32b1 32b2)
+(f1 -> ) Converts the floating point f1 to exponent 32b1 and mantissa 32b2.
+Mantissa is adjusted by RADIX to the 6th power, to allow six #'s to be used
+on it within a formatted string command sequence.
+-*-
+>
+A->F
+!0000012C
+| a->f
+
+A->F
+(addr1 -> addr2 f1)
+The string whose length byte is pointed to by address #1 is converted to f1.
+Address #2 points to the first non-convertible character.  f1 is a 32bit
+floating point value on the integer stack, use S->F to move it to the
+floating point stack for further work.
+-*-
+>
+F->I
+!00000089
+| F->I
+
+F->I
+(f1 -> )
+( -> 32b2) Converts floating point to integer, numerical overflow if
+f1 cannot be represented as an integer.
+-*-
+>
+I->F
+!00000049
+| I->F
+
+I->F
+( -> f1)
+(32b1 -> ) Convert integer to floating point.
+-*-
+>
+F->S
+!000000F5
+| F->S
+
+F->S
+(f1 -> )
+( -> s1) Move floating point number to the integer stack, where it is
+treated as a 32 bit real number.  Such numbers can be dealt with the normal
+stack operators like DUP, and !, but .S will not print them properly.
+-*-
+>
+S->F
+!00000059
+| S->F
+
+S->F
+( -> f1)
+(s1 -> ) Move 32 bit real number to the floating point stack.
+-*-
+>
+S+
+!00000067
+| S+
+
+S+
+(s1 s2 -> s3 ) Adds two 32 bit real numbers, which are kept on the normal
+integer stack.
+-*-
+>
+S-
+!0000006C
+| S-
+
+S-
+(s1 s2 -> s3 ) Subtracts two 32 bit real numbers, which are kept on the
+normal integer stack.
+-*-
+>
+S*
+!0000006D
+| S*
+
+S*
+(s1 s2 -> s3 ) Multiplies two 32 bit real numbers, which are kept on the
+normal integer stack.
+-*-
+>
+S/
+!0000006A
+| S/
+
+S/
+(s1 s2 -> s3 ) Divides two 32 bit real numbers, which are kept on the normal
+integer stack.
+-*-
+^
+>
+COMPARISON
+!00000204
+| comparison
+
+COMPARISON
+Flags in Fifth are integers where 0 is false and -1 is true.  Logical
+operations can be done using AND, OR, NOT, and XOR with flags that are
+strictly true (-1) or strictly false (0), even though AND, OR, NOT, and XOR
+are bitwise operators.  (This is because -1 has all bits set, and 0 has all
+bits clear;  bitwise operators operate on all bits identically.)
+
+Many primitives that take a flag as an input (such as IF) will consider any
+non zero flag to be true, and 0 to be false.
+-*-
+v
+<
+!0000007B
+| <
+
+<
+(32b1 32b2 -> flag) The flag returned is true (-1) if 32b1 is less than
+32b2, otherwise the flag is false (0).
+-*-
+>
+<=
+!000000BA
+| <=
+
+<=
+(32b1 32b2 -> flag) A true flag (-1) replaces 32b1 and 32b2 on the stack
+if 32b1 is less than or equal to 32b2, otherwise 32b1 and 32b2 is replaced
+with a false flag (0).
+-*-
+>
+=
+!000000AB
+| =
+
+=
+(32b1 32b2 -> flag) A true flag (-1) replaces 32b1 and 32b2 on the stack
+if 32b1 is equal to 32b2, otherwise 32b1 and 32b2 is replaced with a false
+flag (0).
+-*-
+>
+>=
+!000000BD
+| >=
+
+>=
+(32b1 32b2 -> flag) A true flag (-1) replaces 32b1 and 32b2 on the stack
+if 32b1 is greater than or equal to 32b2, otherwise 32b1 and 32b2 is
+replaced with a false flag (0).
+-*-
+>
+>
+!0000008E
+| >
+
+>
+(32b1 32b2 -> flag) Compares 32b1 with 32b2; if 32b1 is greater than 32b2,
+the flag is true (-1) otherwise the flag is false (0).
+-*-
+>
+0>
+!00000088
+| 0>
+
+0>
+(32b -> flag) Replace 32b with a true flag (-1) if 32b is greater than zero,
+otherwise replace 32b with a false flag (0).
+-*-
+>
+0=
+!00000084
+| 0=
+
+0=
+(32b -> flag) Replace 32b with a true flag (-1) if 32b is equal to zero,
+otherwise replace 32b with a false flag (0).
+-*-
+>
+0<
+!00000083
+| 0<
+
+0<
+(32b -> flag) Replace 32b with a true flag (-1) if n is less than zero,
+otherwise replace 32b with a false flag (0).
+-*-
+>
+AND
+!000000B0
+| AND
+
+AND
+(32b1 32b2 -> 32b3) 32b1 is bit-wise anded with 32b2 yielding 32b3.  AND can
+be used to logically AND a flag so long as it is strictly true (-1) or false
+(0).
+-*-
+>
+F<
+!0000000D
+cross F< F<
+-*-
+>
+F>
+!0000000D
+cross F> F>
+-*-
+>
+NOT
+!0000009F
+| NOT
+
+NOT
+(32b1 -> 32b2) One's complement 32b1 yielding 32b2.  NOT can be used to
+logically NOT a flag so long as it is strictly true (-1) or false (0).
+-*-
+>
+OR
+!000000AE
+| OR
+
+OR
+(32b1 32b2 -> 32b3) Bitwise or 32b1 to 32b2 yielding 32b3.  OR can be used to
+logically OR two flags so long as the flags are strictly true (-1) or false
+(0).
+-*-
+>
+U<
+!000001D5
+| U<
+
+U<
+(u32b1 u32b2 -> flag) flag is true (-1) if unsigned integer u32b1 is less
+than u32b2, otherwise flag is false (0).  This primitive is especially useful
+in doing range checks where the lower bound is zero.  For example:
+
+                         : x dup 10 u< ;
+
+X is defined to take a number as an input and return the number and a flag.
+The flag will be true (-1) if the number 0 or greater and less than 10;
+otherwise the flag will be false (0);
+-*-
+>
+XOR
+!000000BE
+| XOR
+
+XOR
+(32b1 32b2 -> 32b3) Exclusive OR 32b1 bitwise with 32b2 yielding 32b3.  XOR
+can be used to logically XOR two flags so long as the flags are strictly true
+(-1) or false (0).
+-*-
+^
+>
+COMPILATION
+!00000146
+| compilation
+
+COMPILATION
+The Fifth compiler is unlike most compilers;  It is made up of various bits
+and pieces that the programmer invokes as needed.  Thus we can talk about
+modules being immediate, (They execute at COMPILE time!!) and modules
+generating code. The following is a list of compiling modules in Fifth:
+-*-
+v
+PARSING
+!00000051
+| parsing
+
+PARSING
+The following modules are used to parse the input stream.
+-*-
+v
+\
+!00000038
+| \
+
+\
+( -> ) Skip comments to the end of the line.
+-*-
+>
+(
+!00000067
+| (
+
+(
+( -> ) All characters up to the closing ')' paren are ignored. This is the
+comment module.
+-*-
+>
+'
+!00000230
+| '
+
+'
+( -> 32b ) "Tick" parses the input stream for the next token. If the next
+token is a number, the value of the number is pushed onto the stack.  If
+the next token is a module, then the execution address of the module is
+pushed onto the stack.  ' forces compilation (If the module is compiled
+if necessary). If you type the following code in the interactive mode:
+
+        ' help getname count type
+
+then you will get the output
+
+        HELP
+
+Note that ' is not immediate;  You may define modules that call ' . Also
+see the module ['] .
+-*-
+>
+TEXT
+!00000087
+| TEXT
+
+TEXT
+( 8b -> ) Clears the PAD buffer, then reads from the input stream to the PAD
+buffer until the 8b delimiter is found.
+-*-
+>
+H#
+!0000011A
+| H#
+
+H#
+( -> 32b1) The next token in the input stream is interpreted as a hexadecimal
+number.  For example:
+
+        h# A . 10 .
+
+will print
+
+        10 10
+
+since A is hexadecimal for decimal 10.  Note that the effect is only for the
+number immediately following h#.
+-*-
+>
+ASCII
+!00000086
+| ASCII
+
+`
+( -> 8b1) Returns the ASCII value of the following character. For example
+
+        ` A .
+
+will print
+
+        65
+-*-
+>
+WORD
+!00000147
+| WORD
+
+WORD
+(8b -> addr) Parses the next module in the input stream delimited by the
+character specified by 8b, tabs, blanks, carriage-returns, line-feeds or
+nulls.  Leading whitespace and delimiters are skipped, the word is left at
+address+1, with a count at address.  The count is zero if the input stream
+is empty.
+-*-
+>
+[']
+!000001BA
+| [']
+
+[']
+( -> ) Compiles the execution address of next module in input stream as a
+literal, later execution of code leaves the address on the stack.  ['] is
+often used to obtain a pointer to a function.  For example,
+
+        : x ['] + ;
+
+The module X as defined above returns a pointer to the function + . Given
+this definition of X, the following typed in the interactive environment
+would print a 3.
+
+        1 2 x execute
+-*-
+>
+>IN
+!000000A7
+| >IN
+
+>IN
+( -> addr ) Leaves the address of the hardware pointer in the text input
+buffer. Use @ and ! to get this hardware pointer, but C@@ to read the buffer.
+-*-
+^
+>
+CODE-GEN
+!0000006E
+| code-gen
+
+CODE-GEN
+Code Generation.
+Fifth provides these modules to give control over code generation.
+-*-
+v
+F,
+!0000000D
+cross F, F,
+-*-
+>
+FLITERAL
+!00000019
+cross FLITERAL FLITERAL
+-*-
+>
+C,
+!000001BB
+| c,
+
+c,
+( 8b -> ) "C-Comma" adds 1 byte to the local module (the module currently
+under compilation) and initializes the byte to the value 8b.  For example,
+a buffer ABC could initialized to the counted string "abc" by the code:
+
+        create abc   3 c,  ` a c,  ` b c,  `c c,
+
+If ABC is defined as shown above, and you type:
+
+        abc count type
+
+at the interactive prompt, Fifth would respond by printing:
+
+        abc
+-*-
+>
+W,
+!000001C3
+| w,
+
+W,
+( 16b -> ) "W-Comma" adds 2 bytes to the local module (the module currently
+under compilation) and initializes the 2 bytes to the value 16b.  For
+example, a 2 byte variable LIFE-U&E could be defined and initialized to
+42 by the code:
+
+        create life-u&e  42 w,
+
+The following code would print a the value 42.
+
+        life-u&e w@ .
+
+The value of life-u&e could be changed to 43 by the code
+
+        43 length-of-rain w!
+-*-
+>
+,
+!000001CB
+| ,
+
+,
+(32b -> ) "Comma" adds 4 bytes to the local module (the module currently
+under compilation) and initializes the 4 bytes to the value 32b.  For
+example, a variable LENGTH-OF-RAIN could be defined and initialized to 40
+by the code:
+
+        create length-of-rain 40 ,
+
+The following code would print a the value 40.
+
+        length-of-rain @ .
+
+The value of length-of-rain could be changed to 10 by the code
+
+        10 length-of-rain !
+-*-
+>
+2,
+!000001D2
+| 2,
+
+2,
+(64b -> ) "Two-Comma" adds 8 bytes to the local module (the module currently
+under compilation) and initializes the 8 bytes to the value 64b.  For
+example, a variable GRAINS-OF-SAND could be defined and initialized by
+the code:
+
+        create GRAINS-OF-SAND 123456789 978654321 2,
+
+The following code would get the value of GRAINS-OF-SAND:
+
+        GRAINS-OF-SAND 2@
+
+The value could be changed by the code:
+
+        1 2 GRAINS-OF-SAND 2!
+-*-
+>
+IMMEDIATE
+!00000296
+| IMMEDIATE
+
+IMMEDIATE
+( -> ) IMMEDIATE sets the immediate flag on the local module.  Immediate
+modules are executed whenever they are encountered, even if the compiler
+is on. For example, we could define a module [hex] that changes the base
+used by the compiler to hexadecimal as follows:
+
+        : [hex]   hex    ; immediate
+
+If [hex] is defined as shown above, the code
+
+        : print-a-number  [hex] 20 .  ;
+
+causes [hex] to be executed, changing the base used by the compiler to
+hexadecimal.  The 20 is then interpreted as 20 base 16, or 32 in decimal.
+If you run PRINT-A-NUMBER from the interactive environment, fifth will
+print a 32.
+-*-
+>
+LITERAL
+!00000075
+| LITERAL
+
+LITERAL
+(32b -> ) Causes the top-of-stack value to be compiled just as if it where an
+inline number.
+-*-
+>
+]
+!000001E1
+| ]
+
+]
+( -> ) The compiler is turned on. ] is normally used in conjunction with [
+to change the base during compilation or to compute a constant.  For
+example:
+
+        : x
+            [ .( Hit a key: ) key ] literal emit
+        ;
+
+When the module X is compiled, the programmer is prompted to strike a key.
+Whatever key is struck by the programmer during the compilation of X is
+printed when ever X is executed (without any prompting; that's done at
+compile time).
+-*-
+>
+[
+!000001BB
+| [
+
+[
+( -> ) The compiler is turned off.  [ is normally used in conjunction with ]
+to change the base during compilation or to compute a constant.  For
+example:
+
+        : x
+            [ decimal ]  10
+            [ hex ] 10 + .
+        ;
+
+The module X as defined above would print 26 if executed, since the first 10
+was interpreted while the base was decimal, and the second 10 was
+interpreted while the base was hexadecimal.
+-*-
+>
+[COMPILE]
+!00000241
+| [COMPILE]
+
+[COMPILE]
+( -> ) Causes a call to the next module in the input stream to be generated
+even if the next module is immediate; i.e. this allows an immediate module to
+be called. Here is a much needed example:
+
+        \ ( -> ) When LIMIT is executed, a push of a 10 is generated (by
+        \ literal).  Note that just calling literal would not work, since
+        \ literal is immediate.
+        : limit 10 [compile] literal ; immediate
+
+        \ ( -> ) Y will print the numbers 0 through 9, given x defined above.
+        : y   limit 0 do i . loop ;
+-*-
+>
+COMPILE
+!00000210
+| COMPILE
+
+COMPILE
+( -> ) Causes a call to the next module in the input stream to be generated
+when the module containing COMPILE is run. For example:
+
+        : plus   compile +      ; immediate
+
+        : b      10 20  plus .  ;
+
+Since PLUS is immediate, PLUS executes during the compilation of B. PLUS
+compiles a call to the module + and returns.  The execution of B will then
+do the following:  Push 10 on the data stack, Push 20 on the data stack,
+call + (adding 10 and 20), print the result (30) and return.
+-*-
+>
+STATE
+!0000006F
+| STATE
+
+STATE
+( -> flag ) Leaves the current value of the compiler flag.  0 is off,
+anything else is on.
+-*-
+^
+>
+COMP
+!0000004E
+| COMP
+
+COMP
+( addr -> ) Compiles the module with execution address addr.
+-*-
+>
+EXECUTE
+!00000047
+| EXECUTE
+
+EXECUTE
+(addr -> ) The code at the address is executed.
+-*-
+>
+ABORT
+!000000C7
+| ABORT
+
+ABORT
+( -> ) All stacks are reset, all buffers are cleared, all files are closed,
+the radix is set to 10, input is from keyboard, the screen mode is reset and
+the compiler turned off.
+-*-
+>
+ABORT"
+!0000006E
+| ABORT"
+
+ABORT"
+( flag -> ) If the flag is true, the following message is printed, and ABORT
+is called.
+-*-
+>
+.CREATE
+!000001B7
+| .CREATE
+
+CREATE
+( -> ) CREATE is used to define a data module.  When executed, a data
+module pushes the address of its data area onto the stack. CREATE does
+not allocate any memory, however.  For example, the following code
+allocates and initializes 12 bytes.
+
+        create buff 10 , 12 , 20 ,
+
+If BUFF is defined as shown above, the code
+
+        buff @ .   buff 4 + @ .   buff 8 + @ .
+
+would print
+
+        10 12 20
+-*-
+>
+ALLOT
+!00000150
+| ALLOT
+
+ALLOT
+( 16b -> )  ALLOT allocates 16b bytes to the end of the current local
+module (a module under compilation becomes the local module). For example, a
+1024 byte buffer could be defined with the code
+
+        create buff 1024 allot
+
+The memory added to a module by ALLOT is not initialized to any particular
+value.
+-*-
+>
+:
+!00000355
+| :
+
+:
+( -> ) : is used to begin a colon definition.  Colon turns the compiler on;
+Semicolon turns the compiler off and compiles a return.  This is best
+illustrated by an example:
+
+        \ ( -> ) ADD-THREE&FOUR adds two numbers ( 3 and 4 ) and
+        \ prints the result.
+        : add-three&four   3 4 + .   ;
+
+In this example, colon turns the compiler on. The next token is the name
+given to the colon definition.  (In the text for a module, this name must
+match the name given in the dictionary editor.) Since the compiler is on,
+the code to push a 3 and a 4 onto the stack is generated, followed by code
+to call the + and the . modules.  The semicolon turns the compiler off, and
+compiles a return.  The net result is a module defined such that typing
+
+        add-three&four
+
+in the interactive mode will print
+
+        7
+-*-
+>
+;
+!00000349
+| ;
+
+:
+( -> ) : is used to end a colon definition.  Colon turns the compiler on;
+Semicolon turns the compiler off and compiles a return.  This is best
+illustrated by an example:
+
+        \ ( -> ) PRINT-KEY waits for a key, then prints the numeric value
+        \ corresponding to the key pressed.
+        : print-key   key .   ;
+
+In this example, colon turns the compiler on. The next token is the name
+given to the colon definition.  (In the text for a module, this name must
+match the name given in the dictionary editor.) Since the compiler is on,
+the code to call the KEY and . modules is generated.  The semicolon turns the
+compiler off, and compiles a return.  The net result is a module defined such
+that typing
+
+        print-key
+
+in the interactive mode then pressing the Shift A key should print
+
+        65
+-*-
+>
+SHELL
+!000000C7
+| shell
+
+SHELL
+( -> ) In an infinite loop, prompts and reads from the keyboard, then
+calls INTERPRET on the input buffer. Use EXIT to leave a SHELL. SHELLs may
+be nested, or called from TRACE.
+-*-
+>
+INTERPRET
+!00000137
+| interpret
+
+INTERPRET
+( -> ) Parses from the input buffer. Does the appropriate action based on
+what was parsed.  Numbers get their value pushed on the stack; modules get
+executed.  If the compiler is on, code to do the previous is executed
+instead.  INTERPRET exits when the input buffer is exhausted.
+-*-
+^
+>
+CONDITIONAL
+!000000D3
+| conditional
+CONDITIONAL
+Fifth allows conditional compilation.  These modules are written in Fifth
+themselves.  They allow the program to make decisions at compile time, or in
+the interactive environment.
+-*-
+v
+DO{
+!00000129
+| DO{
+
+DO{
+( 32b1 32b2 -> ) The index is set to 32b2, and increments to 32b1. Text upto
+the enclosing }LOOP is repeated (reparsed). The value of the index,
+terminator and loop address is kept on the return stack. NOTE: DO{ is
+immediate.
+
+The Fifth file COND.FIV must be loaded to use DO{
+-*-
+>
+}LOOP
+!0000013C
+| }LOOP
+
+}LOOP
+( -> ) Bumps the index provided by DO{, and checks it versus the terminator.
+If index equals the terminator, processing continues. If not, the text
+pointer is reset to just after the DO{. Use R@ to get the index. NOTE: }LOOP
+is immediate.
+
+The Fifth file COND.FIV must be loaded to use }LOOP
+-*-
+>
+BEGIN{
+!000000C4
+| BEGIN{
+
+BEGIN{
+( -> ) Saves the text pointer on the return stack, used with }UNTIL or
+}WHILE{ and }REPEAT. NOTE BEGIN{ is immediate.
+
+The Fifth file COND.FIV must be loaded to use BEGIN{
+-*-
+>
+}UNTIL
+!000000EB
+| }UNTIL
+
+}UNTIL
+( flag -> ) If the flag is true, the return stack is popped and execution
+continues. If false, the text pointer is reset to just after an enclosing
+BEGIN{.
+
+The Fifth file COND.FIV must be loaded to use }UNTIL
+-*-
+>
+}WHILE{
+!000000DA
+| }WHILE{
+
+}WHILE{
+( flag -> ) If the flag is true, execution proceeds. If false, the return
+stack is popped, and execution proceeds after the enclosing }REPEAT.
+
+The file COND.FIV must be loaded to use }WHILE{
+-*-
+>
+}REPEAT
+!00000094
+| }REPEAT
+
+}REPEAT
+( -> ) The text pointer is reset to just after an enclosing BEGIN{.
+
+The Fifth file COND.FIV must be loaded to use }REPEAT
+-*-
+>
+}ENDIF
+!0000005F
+| }ENDIF
+
+}ENDIF
+( -> ) Place marker for IF{ and }ELSE{ modules. This module does nothing.
+-*-
+>
+}ELSE{
+!00000056
+| }ELSE{
+
+}ELSE{
+( -> ) Skips text to the next }ENDIF. NOTE: }ELSE{ is immediate.
+-*-
+>
+IF{
+!000000A3
+| IF{
+
+IF{
+( flag -> ) If the flag is true, execution proceeds. If the flag is false,
+text is skipped till the next }ELSE{ or }ENDIF. NOTE: IF{ is immediate.
+-*-
+^
+>
+DICTIONARY
+!00000102
+| DICTIONARY
+
+DICTIONARY
+The fifth dictionary is a complex data structure which contains the source,
+execution code, and data of a number of programs.  Fifth provides the
+following primitives to give the programmer access to the dictionary
+structure.
+-*-
+v
+.BROWSER
+!00000361
+| .browser
+
+BROWSER
+The following functions are available from the Browser (also referred to as
+the Dictionary Editor). Pressing the indicated key invokes the function.
+
+ ESC - Exits the Browser.                 L   - Loads a text file previously
+ A   - Makes a TURNKEY application.             saved using 'S'.
+ C   - Forces the local module to         Q   - Quit to MS-DOS.
+       compile.                           R   - Renames the local module.
+ E   - Edits the local module.            S   - Saves a text file for a
+ D   - Deletes the selected module.             later 'L'.
+ G   - Executes the local module.         T   - Toggles TRACE mode on or off.
+ I   - Inserts a new module before the    F8  - Duplicate the module and it's
+       selected module.                         children.
+
+The following categories provide more indepth help:
+-*-
+v
+DIR-DIS
+!000003D7
+| dir-dis
+DIR-DISPLAY
+               [Local Module] F1-Help, Trace is OFF, Mem: 256000
+
+               Submodules....
+               อออออออออออออออออออออออออออออออออออออออออออออออออ
+               Local module text
+               อออออออออออออออออออออออออออออออออออออออออออออออออ
+               Submodule text
+
+The browser allows inspection and editing of program structure.  The name of
+the local module is displayed in the top left corner of the browser display.
+The local module's text is displayed under the first double line.
+
+The right and left arrows are used to select a submodule, or child, of the
+local module. As room on the screen permits, the text for the selected child
+is displayed beneath the second double line. (No matter how long the local
+module's text may be, at least the first line of the selected child's text
+is always displayed;  by convention, this line should be a comment that gives
+the inputs and outputs for module. See NOTATION).
+-*-
+v
+N
+!00000012
+cross n NOTATION
+-*-
+^
+>
+MM
+!000004B9
+| mm
+MOVE-MODULE
+Moving Modules            [X] F1-Help, Trace is OFF, Mem: = 25602
+
+                          A   B  [C]  D   E
+    PgUp                  อออออออออออออออออออออออออออออออออออออออ
+     ณ                    : x    a b c d e  ;
+  ออุออ                 อออออออออออออออออออออออออออออออออออออออ
+     ณ                    : c   20 .   ;
+    PgDn
+If you hold the CTRL key down and press the left arrow key, the currently
+selected module will be moved to the left. CTRL-right arrow will move the
+currently select module to the right. CTRL-PgUp moves the selected module
+up the dictionary structure, just to the left of the local module; CTRL-PgDn
+moves it beneath the module left of the selected module.
+
+Given the display above, CTRL-left would make B and C change positions.
+CTRL-right would swap C with D.  CTRL-down would move C under B.  CTRL-up
+would move C up in the dictionary, just to the right of X.  Suppose we
+wished to move A under E.  The keys to do so would be (given the display
+above) left arrow (select B), left arrow (select A), CTRL-right (swap A & B),
+CTRL-right (swap A & C), CTRL-right (swap A & D), CTRL-right (swap A & E),
+CTRL-down (move A beneath E).
+-*-
+>
+SAVES-N-LOADS
+!00000476
+| saves-n-loads
+
+SAVES-N-LOADS
+The browser provides for saving and loading text to and from files.  These
+files contain only printable ASCII characters.  To save a particular module
+and its children, make sure this module is the local module (the module
+shown in the top left hand corner of the browser's display).  Then press 'S';
+the browser will prompt you for a file name.
+
+To reload the file, press 'L';  the browser will prompt you for the file
+name.  The file will be loaded in after the last child of the current local
+module.
+
+A few notes are in order.  First, we recommend that you give fifth programs
+a .FIV extension; this convention is not enforced however.  Also note that
+the browser will save all the children of the local module (that are not
+primitives).  Saving your programs with the root module as the local module
+will save the HELP module and a few others in addition to your modules.
+After a few saves and loads, you will notice your files growing rather large.
+To avoid this effect, we recommend you do your work beneath a appropriately
+named module; Saving this module will save only your work.
+-*-
+>
+SELECTION
+!0000043D
+| selection
+
+SELECTION
+Select Module             [X] F1-Help, Trace is OFF, Mem: = 25602
+
+                          A   B   C  [D]  E
+                         อออออออออออออออออออออออออออออออออออออออ
+     ณ                    : x    a b c d e  ;
+  ออุออ                 อออออออออออออออออออออออออออออออออออออออ
+     ณ                    : d   10 .   ;
+     
+The arrow keys allow you to follow the structure of your programs.  The
+left and right arrows change the selected submodule (or child) of the local
+module.  Pressing the down arrow key makes the currently selected child the
+local module. Pressing the up arrow key moves you up in the dictionary; the
+old local module becomes the selected sub module, and its parent becomes the
+local module.
+
+Given the display above, the left arrow would change the selected module
+from D to C.  The right would select E.  The up arrow would make X the
+selected module, and X's parent the local module.  The down arrow would
+make D the local module, with no child selected (The position just right
+of the last module).
+-*-
+>
+TRACE
+!00000013
+cross trace TRACE
+-*-
+>
+TURNKEY
+!00000017
+cross turnkey TURNKEY
+-*-
+>
+GENY
+!00000015
+cross geny GEN-HELP
+-*-
+^
+>
+.EDIT
+!0000045B
+| .EDIT
+
+EDIT Edits the text of the local module.
+
+   Key         Function             Key          Function
+ ฤฤฤฤฤฤฤฤฤ   ฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤ   ฤฤฤฤฤฤฤฤฤ    ฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤ
+   Home      - Left on line         F1         - This help text
+   End       - End of line          F2         - Help on module under cursor
+   PgUp      - Up 23 lines          F3         - Insert blank line
+   PgDn      - Down 23 lines        F7         - Delete line
+   Ins       - Toggle insert mode   F8         - Undelete line
+   Del       - Delete right         F9         - Split line
+   Ctrl-PgUp - Drag line up         F10        - Join line
+   Ctrl-PgDn - Drag line down       Backspace  - Delete left
+   ESC       - Exits the editor     Return     - Move down and left on line
+   TAB       - Skip to next column
+   Shift-TAB - Skip backwards to previous column
+   ^C        - Abort the edit session, changes are NOT kept
+   ^E        - Scroll up 1 line
+   ^G        - Delete right
+   ^N        - Split line
+   ^W        - Toggle word wrap mode
+   ^X        - Scroll down 1 line
+   ^Y        - Delete line
+-*-
+>
+ENV!
+!000000B0
+| env!
+
+ENV!
+(addr -> ) Sets the local environment to the given module.  The search
+path starts at this module.  Unlike F83-FORTH, code is also generated in
+this module.
+-*-
+>
+PACKAGE
+!0000027F
+| package
+
+PACKAGE
+( -> ) Creates a module as a package; marks it as immediate.  Later execution
+of the module puts it's children in the search path, before the normal
+search. For example, assume module X has children A, B and C:
+        package x
+In module JOE we use X to allow access to it's children:
+        : joe x a b c ;
+
+PACKAGE expands the normal scoping of Fifth.  The floating point operators
+can only be reached by using a package called FLOAT.
+
+Up to 6 packages can be used for any module, they are searched in the reverse
+order of definition (i.e. the last package to be used in a module is searched
+first).
+-*-
+v
+FLOAT.
+!00000016
+cross float. <FLOAT>
+-*-
+>
+GRAPHICS.
+!0000001C
+cross graphics. <GRAPHICS>
+-*-
+^
+>
+FIND
+!000001C3
+| FIND
+
+FIND
+(addr1 -> addr2 n) For a string with count byte at address #1, search for
+matching module name in dictionary.  If found addr2 is the indirect execution
+address, n is 1 if immediate, -1 otherwise. If it's not found, then addr2 =
+addr1 and n=0.  The search is first made through any active packages in
+reverse order of definition (packages added later are searched first), then
+the standard search up the tree to the root is made.
+-*-
+>
+GETNAME
+!000000AE
+| getname
+
+GETNAME
+(addr1 -> addr2) Returns the indirect address of the name of module addr1
+points to.  The name has a leading length byte.  This is a READ-ONLY value.
+-*-
+>
+GETSIZE
+!0000004C
+| getsize
+
+GETSIZE
+(addr -> 32b1) Returns the size of the given module.
+-*-
+>
+.UP
+!00000052
+| .UP
+
+UP
+( -> ) Raises the environment level, does nothing if at ROOT level.
+-*-
+>
+CHILD
+!00000063
+| CHILD
+
+CHILD
+(addr1 -> addr2) Returns the address addr2 of the first child of module
+addr1.
+-*-
+>
+NEXT
+!00000064
+| NEXT
+
+NEXT
+(addr1 -> addr2) Returns the address addr2 of the next module after module
+addr1.
+-*-
+^
+>
+ERRORS
+!00000244
+| errors
+ERRORS
+Errors and System messages are displayed in small pop-up boxes in the
+center of your screen.  When an error occurs you have three choices:
+
+   Press Return to enter the Dictionary Editor.
+   Press ESC    to enter the Interactive Mode.
+   Press F1     for a description of the error (the description below
+                that applies).
+
+Select help on ERROR for how to redefine Fifth's error handling. The
+other entries give descriptions of the causes of particular errors.
+
+In a turnkey program, errors just print the error number, and exit to DOS.
+-*-
+v
+ERROR
+!00000336
+| ERROR
+
+ERROR
+( -> addr) Returns the address of the system-wide error handler. By default
+this is ABORT. If a different executable address is stored here, it
+will be passed a 8bit value in machine register AL as the error number,
+whenever an error occurs.
+
+If the error handler ever returns, it will be called again with error #1 (the
+ABORT error). This can quickly lead to infinite loops. User defined error
+handlers CANNOT just return. If you want to access the system after the
+error, call ABORT or SHELL from the handler. (ABORT cleans up the system
+state; we therefore advise the use of ABORT.)
+
+The value stored in ERROR needs to be a hardware address, it will be called
+directly. For example:
+
+' user_error_handler i->d error !
+
+would set up USER_ERROR_HANDLER as the user's own error handler.
+-*-
+>
+ERROR-01
+!000001EE
+| error-01
+
+Error-01
+The module ABORT has been called, either by a user's program, or by Fifth's
+initialization code.  At this point you may enter a key for more help, or
+hit a space bar to return to the error box (if that is where you came from).
+After you return to the error box, you may press:
+
+          F1     for this text,
+          RETURN to enter the Dictionary Editor,
+          ESC    to enter the Interactive Environment.
+
+In general, F1 gives context sensitive help.
+-*-
+v
+ABORT
+!00000013
+cross abort ABORT
+-*-
+>
+GEN-HELP
+!00000019
+cross gen-help GEN-HELP
+-*-
+^
+>
+ERROR-02
+!00000051
+| error-02
+
+Error-02
+You have loaded a text file from the Dictionary Editor.
+-*-
+>
+ERROR-03
+!00000121
+| error-03
+
+Error-03
+You typed Control-C or Control-Break.  Typing Control-C will often stop a
+running Fifth program.  The ABORT code is called to initialize the system
+state.  This includes freeing all dynamically allocated memory, closing all
+open files, and clearing the stacks.
+-*-
+>
+ERROR-04
+!000000EE
+| error-04
+
+Error-04
+The token displayed as the title of the message box was not found in the
+dictionary, nor could it be converted into a number.  This error is usually
+caused by a typo, or a reference to a module not yet defined.
+-*-
+>
+ERROR-05
+!00000076
+| error-05
+
+Error-05
+You tried to use floating point operations
+without having an 8087 math chip in your system.
+-*-
+>
+ERROR-06
+!00000173
+| error-06
+
+Error-06
+Underflow is caused by using more items on the data stack than the data
+stack contains.  Check the logic of your program; you probably forgot to DUP
+something.  ?STACK checks for this condition at run time.  Severely
+underflowing the stack can be fatal to your system.  You may want to save
+your text, reboot, run Fifth and reload your text.
+-*-
+>
+ERROR-07
+!0000014A
+| error-07
+
+Error-07
+Overflow is caused by pushing more items on the data stack than the data
+stack can hold (500 values).  Usually means your program has pushed a value
+on the stack for every iteration of a long loop.  This condition can be
+fatal.  You may want to save your text, reboot, run Fifth and reload your
+text.
+-*-
+>
+ERROR-08
+!000000F7
+| error-08
+
+Error-08
+Return Stack underflow is caused by pulling too many items off the return
+stack, probably with R>.  This condition is fatal; you are lucky to be
+alive.  You should save your text, reboot, run Fifth and reload your text.
+-*-
+>
+ERROR-09
+!0000011A
+| error-09
+
+Error-09
+Return Stack overflow is caused by pushing too many items on the return
+stack, probably with >R, or by calling a module recursively.  This condition
+is fatal; you are lucky to be alive.  You should save your text, reboot, run
+Fifth and reload your text.
+-*-
+>
+ERROR-10
+!0000007B
+| error-10
+
+Error-10
+Floating Point Stack underflow is caused by pulling too many items off the
+floating point stack.
+-*-
+>
+ERROR-11
+!00000079
+| error-11
+
+Error-11
+Floating Point Stack overflow is caused by pushing too many items on the
+floating point stack.
+-*-
+>
+ERROR-12
+!000000FE
+| error-12
+
+Error-12
+This module can only be executed when the compiler is on.  It probably
+generates code when it executes, and there's no place to put code in the
+interactive mode.  You'll have to use this module from inside a colon
+definition.
+-*-
+>
+ERROR-13
+!0000027D
+| error-13
+
+Error-13
+IF's must have matching ENDIF's, ELSE's belong inside IF - ENDIF pairs.
+DO's must have matching LOOP's or +LOOP's.
+LEAVE's and I's must be inside a DO - LOOP.
+J's must be nested inside two DO - LOOP pairs.
+Any BEGIN's must have an UNTIL or a WHILE and a REPEAT.
+Control structures nest inside each other; you cannot start one, start
+another, then finish the first one.  Check your program for forgotten
+or misplaced control structures.
+
+In addition, the data stack must be balanced across the compilation of a
+module.  This means that the compilation of a module cannot leave items
+on the data stack.
+-*-
+>
+ERROR-14
+!00000145
+| error-14
+
+Error-14
+You have more IF's, BEGIN's, and DO's currently under compilation than the
+internal compiler stack can hold.  This is probably caused by trying to
+compile a large program all at once; the nested compilations overflowed the
+compiler stack.  Try using the Browser to compile your program in pieces.
+-*-
+>
+ERROR-15
+!00000248
+| error-15
+
+Error-15
+Out of Memory!  You may have the memory you need, but it could be too
+fragmented to make use of it.  This error causes the heap to be compressed,
+so you could try the operation again.  If it fails twice, you may have to try
+more drastic measures.  You could delete unused, space consuming primitives -
+the graphics or floating point routines, for example.  You could remove the
+text from pieces of your program that are working.  You could expand the
+memory in your system (up to the limit of the hardware).  Finally you could
+shrink your application.
+-*-
+>
+ERROR-16
+!00000193
+| error-16
+
+Error-16
+You attempted to execute a module that wasn't compiled and didn't have any
+text.  When the Fifth system tried to compile it, there wasn't anything to
+compile!  Add some text, or quit trying to use this module.  This error
+commonly happens to newcomers to Fifth, when they try to use the Go key
+from the Dictionary Editor on a module without text (such as the root
+module).
+-*-
+>
+ERROR-17
+!00000447
+| error-17
+
+Error-17
+This is a tricky one!  The text for the module that tried to compile
+CREATE'ed a module with a different name.  The text for module needs to
+create its own name.  You probably typo'ed the name in the text, or tried to
+define a module other than `FIFTH' at the root module.  Change the name of
+the module your defining (the Rename function from the Dictionary Editor)
+or edit your text, and change the text name to match the module name.
+
+For example if your screen looks like this:
+   ฺฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฟ
+   ณ [FIFTH] F1 - Help,                          ณ
+   ณ                                             ณ
+   ณ List of primitives....                      ณ
+   ณ                                             ณ
+   ณ อออออออออออออออออออออออออออออออออออออออออออ ณ
+   ณ : x ." Hello, world" ;                      ณ
+   ณ อออออออออออออออออออออออออออออออออออออออออออ ณ
+   ณ                                             ณ
+   ภฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤฤู
+You're trying to create a module X in a module named Fifth.
+-*-
+>
+ERROR-18
+!00000105
+| Error-18
+
+Error-18
+Fifth was in the middle of compiling when it ran out of text.  Probably
+caused by forgetting the `;' to end a colon definition.  If you are doing
+tricky things with the compiler, make sure you turn it off before you run
+out of text.
+-*-
+>
+ERROR-19
+!00000130
+| error-19
+
+Error-19
+You used ' (tic) or some other parsing module, but didn't have a token to
+parse.  Make sure your using the module right - ' (tic) executes at
+run-time, but ['] executes at compile time.  Whenever the module executes,
+the input stream needs to have a token in it to be parsed.
+-*-
+>
+ERROR-20
+!000000D5
+| error-20
+
+Error-20
+You used a string parsing module, but failed to close the string literal.
+Probably you forgot the closing quote in a " (quote) string literal, or the
+closing parenthesis in a ( comment.
+-*-
+>
+ERROR-21
+!000001D9
+| error-21
+
+Error-21
+This is an error MS-DOS returns.  You probably got it when trying to load
+text from DIR or when saving the system.  On a load it probably means you
+misspelled the name.  On a save it probably means you ran out of disk space.
+MS-DOS returns a number of other errors, of which Fifth does not report
+properly.  If you don't think your error was caused by one of the above
+conditions, you'll have to use your intuition to figure out what's wrong.
+-*-
+>
+ERROR-22
+!0000026C
+| error-22
+
+Error-22
+Ouch!  This one's really complicated.  You have got a set of modules which
+all use each other to compile.  To compile any one of them means that
+another one has to be compiled.  If Fifth can compile any one of them, then
+the loop is broken and they all can be compiled.  The problem is that to
+compile one module requires the execution of another.  Before you can
+execute it, it must also be compiled, and to compile it requires the
+execution of another module...  Get the picture?
+
+Try simplifying things somewhat, pick a module and remove the references to
+the other modules from it.
+-*-
+>
+ERROR-23
+!000000EE
+| error-23
+
+Error-23
+You attempted to store a value at a bad address.  This error is similar to
+range checking done by some systems.  This is probably caused by an array
+index being out of bounds or an address calculation gone bad.
+-*-
+>
+MORE
+!00000030
+| more
+
+MORE
+More Errors are listed here...
+-*-
+v
+ERROR-24
+!000000A5
+| error-24
+
+Error-24
+The parameter to a STACK module was poorly formed or you attempted to load a
+damaged text file.  See HELP on STACK or LOAD, as appropiate.
+-*-
+>
+ERROR-25
+!000000B2
+| error-25
+
+Error-25
+The Math Coprocessor signaled some exception.  Typically this is the result
+of taking the square root of a negative number, or other illegal operation.
+-*-
+>
+ERROR-26
+!000002D3
+| error-26
+
+Error-26
+Your program could not be converted to a standalone application.  Either some
+needed primitives had been deleted from the system, or your program tried to
+include the FIND module.
+
+Some of the primitives are cross-linked internally.  For instance, FCOS uses
+FSIN.  If you delete FSIN from the system, but use FCOS in a program, the
+created program will not work, and cannot be made into a standalone
+application.  If you think this is the problem, exit to DOS, and load a fresh
+Fifth system with all primitives intact.
+
+Standalone programs cannot include the FIND module.  Some primitives use FIND
+internally, these include INTERPRET, SHELL, COMP, ' (tic), CREATE, COLON,
+.S and TRACE.
+-*-
+^
+^
+>
+SCREEN_I/O
+!0000006A
+| screen_i/o
+
+SCREEN_I/O
+These primitives provide for screen management and for reading the keyboard.
+-*-
+v
+.
+!00000063
+| .
+
+.
+(32b -> ) Signed integer number is printed in the current radix with a
+trailing blank.
+-*-
+>
+."
+!0000006E
+| ."
+
+."
+( -> ) Following string is compiled inline for later display. String is
+terminated by a quote."
+-*-
+>
+.(
+!00000063
+| .(
+
+.(
+( -> ) Following string is immediately displayed, until the terminating
+parenthesis.
+-*-
+>
+.S
+!0000013F
+| .S
+
+.S
+(32b1 32b2 ... -> )
+(f1 f2 ... -> ) Non-destructive print of all values on stack as signed
+integer values.  Valid addresses are also printed as ModuleName+Offset.  If
+the address is an execution address, a tic is printed before the ModuleName.
+
+The floating point stack is displayed on the next line.
+-*-
+>
+<#
+!00000043
+| <#
+
+<#
+( -> ) Reset the formatted string length and pointer.
+-*-
+>
+U.
+!0000003E
+| U.
+
+U.
+(u32b -> ) The unsigned integer u32b is printed.
+-*-
+>
+F.
+!0000000D
+cross F. F.
+-*-
+>
+COUNT
+!000000BD
+| COUNT
+
+COUNT
+(addr1 -> addr2 8b) The string whose length byte is pointed to by address #1
+has it's length byte pushed onto the stack, address #1 is incremented
+yielding address #2.
+-*-
+>
+TYPE
+!00000065
+| TYPE
+
+TYPE
+(addr +n -> ) +n characters from the string at address are echoed to the
+terminal.
+-*-
+>
+SPACES
+!00000042
+| SPACES
+
+SPACES
+(32b -> ) Output 32b spaces to the terminal.
+-*-
+>
+SPACE
+!0000003A
+| SPACE
+
+SPACE
+( -> ) Output a space to the terminal.
+-*-
+>
+SCREEN
+!000000FC
+| SCREEN
+
+SCREEN
+( -> 32b) Returns the indirect address of the current video text screen.
+SCREEN is compatible with such primitives as FILL and MOVE. On the IBM,
+SCREEN keeps track of the correct screen for both black & white and color
+screens.
+-*-
+>
+QUERY
+!0000004A
+| QUERY
+
+QUERY
+( -> ) Causes the input buffer to be flushed and read.
+-*-
+>
+POPBOX
+!00000166
+| popbox
+
+POPBOX
+( x1 y1 x2 y2 border interior title contents -> 8b) Displays a popbox from
+x1,y1 to x2,y2, with specified border and interior colors. The title must be
+a null terminated (NOT length byte) string. The contents is also a null
+terminated string. No error checking is done, so bad x,y values, or strings
+that are too long will look bad.
+-*-
+>
+KEY
+!0000008E
+| KEY
+
+KEY
+( -> 8b) Wait for a character from the standard input stream, do not echo it.
+Single CR's and CR/LF pairs are mapped to LF's.
+-*-
+>
+GOTOXY
+!00000051
+| GOTOXY
+
+GOTOXY
+( 32b1 32b2 -> ) Moves the cursor to column 32b1, row 32b2.
+-*-
+>
+GETXY
+!00000065
+| getxy
+
+GETXY
+( -> 8b1 8b2 ) Returns the cursor position as column 8b1 (0-79),
+row 8b2 (0-24).
+-*-
+>
+EXPECT
+!00000151
+| EXPECT
+
+EXPECT
+(addr 8b1 -> addr 8b2) Read 8b1 characters at addr or until a CR, with
+backspace editing.  8b2 is the number of characters read.  If ESC is pressed,
+editing is aborted immediately and 8b2 is -1.  If a function key is pressed,
+editing is aborted immediately and 8b2 is 0.  The returned string is null
+terminated.
+-*-
+>
+EMIT
+!0000006F
+| EMIT
+
+EMIT
+(8b -> ) The 8b value is sent to the standard output stream.
+LF's are mapped to CR/LF pairs.
+-*-
+>
+CR
+!0000005A
+| CR
+
+CR
+( -> ) Sends a carriage-return/line-feed pair to the standard output stream.
+-*-
+>
+CLS
+!0000003C
+| CLS
+
+CLS
+( -> ) Clear the screen and home the cursor.
+-*-
+>
+?TERM
+!0000008B
+| ?TERM
+
+?TERM
+( -> flag) Leave a true flag if a character is available from the standard
+input stream, otherwise leave a false flag.
+-*-
+>
+CLREOL
+!00000054
+| CLREOL
+
+CLREOL
+( -> ) Clears from the cursor position to the end of the line.
+-*-
+^
+>
+DISK_I/O
+!00000057
+| disk_i/o
+
+DISK_I/O
+The following primitives are used to read and write to files.
+-*-
+v
+WRITE
+!00000105
+| WRITE
+
+WRITE
+(addr 32b1 32b2 -> 32b3 -1) or (addr 32b1 32b2 -> 32b3  0) Write buffer at
+address.  Buffer length written is 32b1 bytes.  File handle is 32b2.  32b3 is
+the number of bytes written followed by -1, or 32b3 is an error number
+followed by 0.
+-*-
+>
+SEEK
+!0000018A
+| SEEK
+
+SEEK
+(32b1 8b 32b2 -> 32b3 -1) or (32b1 8b 32b2 -> 32b4 0) Moves file pointer 32b1
+bytes from offset specified in 8b, in file with handle 32b2. Returns new file
+pointer position 32b3 and a true flag, or error code 32b4 and a false flag.
+If 8b = 0 then offset is from file beginning, if 8b = 1 then offset is from
+the current position, if 8b = 2 then offset is from end of file.
+-*-
+>
+RENAME
+!000000B3
+| RENAME
+
+RENAME
+(addr1 addr2 -> -1) or (addr1 addr2 -> 32b1 0) File with name at addr1 is
+renamed to name at addr2. Returns a true flag, or error code 32b1 and false
+flag.
+-*-
+>
+READ
+!000000FC
+| READ
+
+READ
+(addr 32b1 32b2 -> 32b3 -1) or (addr 32b1 32b2 -> 32b3 0) The buffer at
+address is filled with 32b1 bytes from file with handle 32b2. 32b3 is the
+number of bytes actually read, unless an error occurred. Then 32b3 is the
+error code.
+-*-
+>
+OPEN
+!00000127
+| OPEN
+
+OPEN
+(addr 8b -> 32b1 -1) or (addr 8b -> 32b2 0) Opens existing file with name at
+address. 8b is 0 for read, 1 for write, 2 for read and write. Returns 32b1 as
+file handle and true flag, or 32b2 as error code and false flag. The 32b1
+handle will be used in all I/O with the file.
+-*-
+>
+DELETE
+!00000094
+| DELETE
+
+DELETE
+(addr -> -1) or (addr -> 32b1 0) Deletes file with name at address. Returns
+a true flag, or error code 32b1 and a false flag.
+-*-
+>
+CREATEFILE
+!00000137
+| CREATEFILE
+
+CREATEFILE
+(addr 32b1 -> 32b2 -1) or (addr 32b1 -> 32b2  0) Create file with name at
+address and attributes 32b1. 32b1 is 1 = read only, 2 = hidden, 4 = system,
+20h = archive. Sum bits for multiple attributes. 32b2 is the file handle,
+unless an error occurred, then 32b2 is the error code.
+-*-
+>
+CLOSE
+!000000A2
+| CLOSE
+
+CLOSE
+(32b1 -> -1) or (32b1 -> 32b2 0) Close file with handle 32b1. Returns true
+flag if no error. Returns false flag and error code 32b2 if error.
+-*-
+^
+>
+STRINGS
+!0000004F
+| strings
+
+STRINGS
+The following primitives are used to manipulate strings
+-*-
+v
+"
+!0000008E
+| "
+
+"
+( -> addr ) Compiles a string literal inline, up to the terminating quote.
+Returns the address of the length byte of the literal.
+-*-
+>
+#
+!000000CE
+| #
+
+#
+(+32b1 -> +32b2 ) Positive number +32b1 is divided by the current radix. The
+remainder is converted to a digit and stuffed into the formatted string
+buffer.  The quotient is left on the stack.
+-*-
+>
+#>
+!00000076
+| #>
+
+#>
+(32b -> addr +n ) Number on stack is replaced by the address and
+length of the formatted string buffer.
+-*-
+>
+#S
+!00000062
+| #S
+
+#S
+(+32b -> 0 ) All remaining digits of 32b are placed in the formatted string
+buffer.
+-*-
+>
+#TIB
+!0000008F
+| #TIB
+
+#TIB
+( -> addr) Leaves address of terminal input buffer, first byte is length,
+next is buffer. Use C@ or COUNT to get the length.
+-*-
+>
+A->I
+!000000B0
+| a->i
+
+A->I
+(addr1 -> addr2 32b) The string whose length byte is pointed to by address #1
+is converted to 32b. Address #2 points to the first non-convertible
+character.
+-*-
+>
+PAD
+!00000068
+| PAD
+
+PAD
+( -> addr) Leaves the address of the start of the formatted string buffer on
+the stack.
+-*-
+>
+HOLD
+!00000054
+| HOLD
+
+HOLD
+(8b -> ) Pushes the 8b character into the formatted string buffer.
+-*-
+>
+SIGN
+!00000070
+| SIGN
+
+SIGN
+(32b -> ) Place a sign '-' character in the formatted string buffer if 32b is
+less than zero.
+-*-
+>
+TIB
+!00000063
+| TIB
+
+TIB
+( -> addr) Leaves the address the start of the terminal input buffer on the
+stack.
+-*-
+>
+STR=
+!0000009E
+| str=
+
+STR=
+(addr1 addr2 -> flag ) Compares two null terminated strings.  Returns a
+true flag (-1) if all characters match, a false flag (0) otherwise.
+-*-
+^
+>
+MISC
+!0000005B
+| misc
+
+MISC
+This section describes primitives that do not lump into any one category.
+-*-
+v
+TRACE
+!0000029E
+| TRACE
+
+TRACE
+( -> ) TRACE moves the cursor to the screen top, and prints the stack and
+the module about to be executed. If F1 is hit, this message is shown. If the
+space bar is hit, execution proceeds normally. If ESC is hit, ABORT is
+called. If return is hit, a nested SHELL is invoked. Other keys are ignored.
+If Trace is set on from the DIR command, TRACE is called before each module
+in the module being traced.  If TRACE is used in a module, it functions as a
+breakpoint.
+
+If you have nested a SHELL, use EXIT to quit the SHELL.
+
+Module .S is used to display the stack contents; they are displayed
+symbolically.  See the .S help for a description.
+-*-
+v
+.S
+!0000000D
+cross .s .S
+-*-
+>
+SHELL
+!00000013
+cross shell shell
+-*-
+^
+>
+TURNKEY
+!00000425
+| turnkey
+turnkey
+( -> ) Builds a stand alone out of the local module.  This program is given
+an .EXE extension and includes only the executable code of the modules
+actually called directly or indirectly by the local module.  Unused modules,
+unused portions of the Fifth kernel, and text are not included in this file.
+
+Some code optimization is also done.  Complete range checking on all stores
+and fetches is done so long as a program is executed under the Fifth
+environment.  When a turnkey program is generated, this range checking is
+not done, under the assumption that a turnkey program has been thoroughly
+debugged.
+
+In addition, the error handler is changed to one that just prints the message
+'Fifth error' and exits to DOS, setting the DOS error code. If you want more
+extensive error handling see ERROR.
+
+TURNKEY can be called directly from the Browser by making the desired module
+the local module and pressing 'A' for Application Generator.  TURNKEY will
+recompile your program several times, and may take a moment to complete.
+-*-
+v
+ERROR
+!00000013
+cross error ERROR
+-*-
+^
+>
+I->D
+!0000005A
+| I->D
+
+I->D
+(addr -> 32b) Convert indirect address to a direct hardware 32b address.
+-*-
+>
+C!!
+!00000054
+| C!!
+
+C!!
+( 8b 32b -> ) Store the 8b value at the 32b direct hardware address.
+-*-
+>
+C@@
+!00000057
+| C@@
+
+C@@
+(32b -> 8b) The 8b value at the direct hardware address 32b is fetched.
+-*-
+>
+IN
+!00000038
+| IN
+
+IN
+(32b -> 8b) Input 8b from port number 32b.
+-*-
+>
+OUT
+!0000004C
+| OUT
+
+OUT
+(8b 32b -> ) The 8b value is outputted thru port number 32b.
+-*-
+>
+R@
+!0000005E
+| R@
+
+R@
+( -> 32b) Copies a value from the return stack and places it on the data
+stack.
+-*-
+>
+R>
+!0000005D
+| R>
+
+R>
+( -> 32b) Pulls a value from the return stack and places it on the data
+stack.
+-*-
+>
+MEMORY
+!00000092
+| MEMORY
+
+MEMORY
+( -> 32b) Returns the amount of free memory. Memory could be fragmented,
+saving and reloading Fifth will compress the HEAP.
+-*-
+>
+DECIMAL
+!0000003A
+| DECIMAL
+
+DECIMAL
+( -> ) Force the radix to base 10.
+-*-
+>
+HEX
+!00000032
+| HEX
+
+HEX
+( -> ) Force the radix to base 16.
+-*-
+>
+BYE
+!0000003A
+| BYE
+
+BYE
+( -> ) Exits to calling procedure. (MSDOS)
+-*-
+>
+BASE
+!00000064
+| BASE
+
+BASE
+( -> addr) Leaves the address of the radix. Valid radix are in the range 2
+to 72.
+-*-
+>
+>R
+!00000042
+| >R
+
+>R
+(32b -> ) 32b value is pushed onto the return stack.
+-*-
+>
+:=
+!00000413
+| :=
+
+:=
+( addr -> )
+To use this word, you must load ASSIGN.FIV.
+
+This word allows conventional expressions to be written in Fifth.  It expects
+an address on the stack.  This is where the results of the expression will be
+stored.  For example, a := ( 5.0 + 6.0 ) * ( b / ( d - e [ 3 ] ) ; will
+assign to A the value of the given expression. Notice that spaces ARE
+required between each operator, variable, etc.
+
+Also notice the use of the array E. Its subscript, 3, is inclosed by square
+brackets.  E must be defined as an array using DOES>. Each element in the
+array must be four bytes long. A two dimensional array can be included by
+inclosing each subscript in square brackets.
+For example, b := a [ 4 ] [ 6 ] ;
+
+Every statement must be ended with a semicolon.  Notice that mixed mode
+arithmetic is NOT supported.  If you want the n+1 element of an array, you
+must write something like:
+   n @ 1+ tmp !
+   b := e [ tmp ] + 8.0 ;
+Single integer constants are allowed, but a := 3 + b ; is the same as
+   3 b @ f+ a !
+-*-
+^
+>
+STACK_OP
+!0000004A
+| stack_op
+
+STACK_OP
+These stack operators manipulate the data stack:
+-*-
+v
+?DUP
+!0000007E
+| ?DUP
+
+?DUP
+(32b -> 32b 32b) or (0 -> 0) If the top-of-stack value is zero, nothing
+occurs, otherwise it is duplicated.
+-*-
+>
+SWAP
+!0000004E
+| SWAP
+
+SWAP
+(32b1 32b2 -> 32b2 32b1) Top two stack elements are swapped.
+-*-
+>
+OVER
+!0000005D
+| OVER
+
+OVER
+(32b1 32b2 -> 32b1 32b2 32b1) Stack is modified according to stack diagram.
+-*-
+>
+DEPTH
+!0000004A
+| DEPTH
+
+DEPTH
+( -> n) Return the depth of the stack, not counting n.
+-*-
+>
+PICK
+!00000099
+| PICK
+
+PICK
+(+n -> 32b) Leave a copy of the nth stack location over +n. +n is zero based
+so DUP is the same as 0 PICK and OVER the same as 1 PICK.
+-*-
+>
+DUP
+!00000044
+| DUP
+
+DUP
+(32b -> 32b 32b) Duplicate the top-of-stack element.
+-*-
+>
+DROP
+!0000003C
+| DROP
+
+DROP
+(32b -> ) A 32b is dropped from the stack.
+-*-
+>
+?STACK
+!00000052
+| ?STACK
+
+?STACK
+( -> flag) Returns a true flag if the stack has underflowed.
+-*-
+>
+SSTACK
+!000002C9
+| sstack
+
+STACK (32b1 32b2 ... -> ... )
+
+stack AB|ABAB           (32b1 32b2 -> 32b1 32b2 32b1 32b2)
+stack ABC|CAB           (32b1 32b2 32b3 -> 32b3 32b1 32b2)
+stack ABCDE|EE          (32b1 32b2 32b3 32b4 32b5 -> 32b5 32b5)
+
+Let me explain the last example.  A is deepest, E is on on the top of the
+stack on the `before' side of |. On the after side, E is the only thing left;
+ABCD were all thrown away, and E is DUPed, giving two copies of E.
+
+STACK can simplify understanding of complicated stack manipulations.
+
+STACK is limited to no more than 26 elements on the before side, no limit on
+the after side. It is not case sensitive, but the letters on the before side
+must be in order "ABC..." .
+-*-
+^
+>
+STRUCTURES
+!000000CC
+| structures
+
+STRUCTURES
+Fetching and storing data is how Fifth deals with variables. The looping and
+testing constructs let Fifth programs make decisions. The block operations
+are fast primitives.
+-*-
+v
+DYNAMIC
+!0000005C
+| dynamic
+
+DYNAMIC
+Primitives for allocating and deallocating memory from Fifth's heap.
+-*-
+v
+DISPOSE
+!00000114
+| DISPOSE
+
+DISPOSE
+(addr -> ) Deletes module with parameter area address, and all sub-modules
+and related text.  Does not mark following modules as 'Not Compiled' ,
+therefore it should not be used to delete code modules.  Usually used to
+remove modules created by NEW.
+-*-
+>
+NEW
+!0000018C
+| NEW
+
+NEW
+( -> addr) Creates a module, exactly as CREATE does, except the name is
+always a 'þ' a special character).  Returns addr as the parameter area. Used
+for dynamic storage allocation to the HEAP.  The local environment is changed
+to the new module.  This allows ALLOT to allocate storage to the new object.
+Use UP to restore the local environment, after all allocations are done.
+-*-
+v
+.UP
+!0000000E
+cross .UP UP
+-*-
+^
+^
+>
+DATA_STRUCT
+!00000060
+| data_struct
+
+DATA_STRUCT
+These primitives are used to build and maintain data structures.
+-*-
+v
+FCONSTANT
+!0000001B
+cross FCONSTANT FCONSTANT
+-*-
+>
+FVARIABLE
+!0000001B
+cross FVARIABLE FVARIABLE
+-*-
+>
+F!
+!0000000D
+cross f! F!
+-*-
+>
+F@
+!0000000D
+cross f@ F@
+-*-
+>
+>BODY
+!0000006D
+| >BODY
+
+>BODY
+(addr1 -> addr2) Convert the execution address addr1 to a parameter field
+address addr2.
+-*-
+>
+FILL
+!0000004F
+| FILL
+
+FILL
+(addr 32b 8b -> ) From address, 32b bytes are filled with 8b.
+-*-
+>
+ERASE
+!0000003B
+| ERASE
+
+ERASE
+(addr 32b -> ) Zeros 32b bytes at addr.
+-*-
+>
+MOVE
+!000000DB
+| MOVE
+
+MOVE
+(addr1 addr2 32b -> ) 32b characters from addr1 are moved to addr2.  MOVE
+is smart, i.e. if addr1 and addr2 overlap data is moved such that it is
+not destroyed. (If you wish a fill effect, use FILL).
+-*-
+>
+DOES>
+!00000180
+| DOES>
+
+DOES>
+( -> ) Causes the address of the code following the DOES> to be placed in the
+current module's indirect parameter address. UP is called, to restore the
+local module from a previous CREATE. Later execution of a module CREATE'd
+with this module will execute the code following the DOES>. The current
+module's compilation is completed without executing this code.
+-*-
+>
+HERE
+!00000052
+| HERE
+
+HERE
+( -> addr ) Leaves the address of the current top of dictionary.
+-*-
+>
+SCAN
+!000000E4
+| SCAN
+
+SCAN
+( addr 32b1 8b -> 32b2 ) Scan 32b1 bytes at addr for 8b. Return 32b2 as
+offset + 1 of first occurrence of byte 8b in addr. Return 0 if byte not found
+in 32b1 characters. If byte is first character, 32b2 is 1.
+-*-
+>
+CONSTANT
+!0000009B
+| CONSTANT
+
+CONSTANT
+(32b -> ) Next module in the input stream is compiled into the dictionary.
+Later execution of this name leaves 32b on the stack.
+-*-
+>
+VARIABLE
+!00000075
+| VARIABLE
+
+VARIABLE
+( -> ) The next module in the input stream is CREATE'd, and 4 bytes reserved
+for it's use.
+-*-
+>
+!
+!0000003F
+| !
+
+!
+( 32b addr -> ) Store the 32b value at the address.
+-*-
+>
++!
+!00000041
+| +!
+
++!
+(32b addr -> ) Add 32b to the value at the address.
+-*-
+>
+2!
+!00000042
+| 2!
+
+2!
+(64b addr -> ) Store the 64b value into the address.
+-*-
+>
+2@
+!00000047
+| 2@
+
+2@
+(addr -> 64b ) Fetch the 64b value stored at the address.
+-*-
+>
+W!
+!0000003C
+| W!
+
+W!
+(16b addr -> ) 16b value is stored at address.
+-*-
+>
+C!
+!0000003A
+| C!
+
+C!
+(8b addr -> ) 8b value is stored at address.
+-*-
+>
+W@
+!0000008A
+| W@
+
+W@
+(addr -> 16b) 16b value is fetched from the address, the high bytes are set
+to zero and placed on the stack as a 32b value.
+-*-
+>
+C@
+!00000088
+| C@
+
+C@
+(addr -> 8b) 8b value is fetched from the address, the high bytes are set
+to zero and placed on the stack as a 32b value.
+-*-
+>
+@
+!00000042
+| @
+
+@
+(addr -> 32b) The 32b value at the address is fetched.
+-*-
+^
+>
+CTL_STRUCT
+!00000078
+| ctl_struct
+
+CTL_STRUCT
+Control Structures. These primitives provide for building loops and
+conditional branches.
+-*-
+v
+BEGIN
+!00000077
+| BEGIN
+
+BEGIN
+( -> ) Marks the beginning of a BEGIN body test UNTIL loop or a BEGIN test
+WHILE body REPEAT loop.
+-*-
+>
+WHILE
+!000000A2
+| WHILE
+
+WHILE
+(flag -> ) Used to test for loop termination in a BEGIN test WHILE body
+REPEAT loop. If the flag is false the loop is exited past the REPEAT.
+-*-
+>
+REPEAT
+!0000006E
+| REPEAT
+
+REPEAT
+( -> ) Causes a loop to an enclosing BEGIN in a BEGIN test WHILE body REPEAT
+construct.
+-*-
+>
+UNTIL
+!0000008E
+| UNTIL
+
+UNTIL
+(flag -> ) Loops to enclosing BEGIN if flag is false, otherwise the loop
+terminates. Used in BEGIN body test UNTIL loops.
+-*-
+>
+IF
+!0000036A
+| IF
+
+IF
+(flag -> ) Used in a test IF true-body ENDIF or test IF true-body ELSE
+false-body ENDIF construct. Branches according to whether the flag is
+non-zero (true) or zero (false). For example:
+
+        -1 if                \ Tests the -1 (which is trivially true)
+           ." Howdy"         \ True body    (which will be executed in
+        else                 \               this example)
+           ." Hello"         \ False body   (which will be skipped in
+        endif                \               this example)
+
+would print "Howdy".  The ELSE clause is not required.  This example could
+be coded as follows as well, with the same results:
+
+        -1 if                \ Tests the -1 (which is trivially true)
+           ." Howdy"         \ True body    (which will be executed in
+        endif                \               this example)
+-*-
+>
+ELSE
+!00000055
+| ELSE
+
+ELSE
+( -> ) Used in a test IF true-body ELSE false-body ENDIF construct.
+-*-
+>
+ENDIF
+!00000078
+| ENDIF
+
+ENDIF
+( -> ) Used inside a test IF true-body ENDIF or test IF true-body ELSE false-
+body ENDIF construct.
+-*-
+>
+DO
+!000000EC
+| DO
+
+DO
+(32b1 32b2 -> ) Move 32b1 and 32b2 to the return stack. 32b2 is the initial
+value and 32b1 is the limit. All code between the DO and the LOOP or +LOOP is
+repeat until the index crosses the (limit-1)  to (limit) boundary.
+-*-
+>
+I
+!0000004E
+| I
+
+I
+( -> 32b) Leaves the value of the innermost DO index on the stack.
+-*-
+>
+J
+!00000055
+| J
+
+J
+( -> 32b) Leaves the value of the second innermost DO index on the stack.
+-*-
+>
+LEAVE
+!00000060
+| LEAVE
+
+LEAVE
+( -> ) Causes the innermost DO body LOOP construct to be exited immediately.
+-*-
+>
++LOOP
+!000000DC
+| +LOOP
+
++LOOP
+(n -> ) Add the value n to the loop index, if the index crossed the (limit -
+1) to (limit) boundary terminate, otherwise loop to the enclosing DO. The
+index and limit values are on the return stack.
+-*-
+>
+LOOP
+!00000104
+| LOOP
+
+LOOP
+( -> ) Increments the loop index by one, in a DO body LOOP construct. If the
+index crosses the (limit-1) to (limit) boundary, then the index and limit are
+removed from the return stack and the loop is terminated, otherwise loops to
+the DO.
+-*-
+>
+EXIT
+!0000012A
+| EXIT
+
+EXIT
+( -> ) If encountered with the compiler on, EXIT generates code to
+exit the current module. >R and R> modules must be balanced, but
+DO/LOOP's do not. If the compiler is off, EXIT exits the currently nested
+SHELL. If a SHELL was invoked from TRACE, use EXIT to continue tracing.
+-*-
+^
+^
+>
+GRAPHICS
+!0000013C
+| graphics
+
+<GRAPHICS>
+Fifth supports IBM CGA style graphics, with a resolution of 320x200 with 4
+colors.  If you have this type of display adapter a 4 VMODE will put you in
+graphics mode.  Color is a number from 0 to 3. To use these words you need
+to use the package called <GRAPHICS>.  See help on PACKAGE.
+-*-
+v
+VMODE
+!0000006E
+| VMODE
+
+VMODE
+( mode -> ) Set the video display mode, both black & white and color modes
+are supported.
+-*-
+>
+TEXTVMODE
+!00000070
+| TEXTVMODE
+
+TEXTVMODE
+( -> ) Set the video display mode to the default video mode, generally a
+text mode.
+-*-
+>
+PALETTE
+!00000061
+| PALETTE
+
+PALETTE
+( 32b1 32b2 -> ) 32b1 is the background color, and 32b2 is either 0 or 1.
+-*-
+>
+PGET
+!00000040
+| PGET
+
+PGET
+( x y -> color ) Returns the color of a point.
+-*-
+>
+PSET
+!0000002F
+| PSET
+
+PSET
+( color x y -> ) Set a point.
+-*-
+>
+PAINT
+!00000080
+| PAINT
+
+PAINT
+( x y color1 color2 -> ) Starting at (x,y), fill the screen with color1,
+stopping on both color boundaries.
+-*-
+>
+MOVETO
+!00000045
+| moveto
+
+MOVETO
+(x y -> ) Sets the current graphics draw point.
+-*-
+>
+MOVETO?
+!00000047
+| moveto?
+
+MOVETO?
+( -> x y) Gets the current graphics draw point.
+-*-
+>
+LINETO
+!00000075
+| LINETO
+
+LINETO
+( color x y ) Draws a line from the current draw point to x,y. Sets x,y
+as the new draw point.
+-*-
+>
+FILLBOX
+!0000003D
+| FILLBOX
+
+FILLBOX
+( color x1 y1 x2 y2 -> ) Fills a box.
+-*-
+>
+BOX
+!00000035
+| BOX
+
+BOX
+( color x1 y1 x2 y2 -> ) Draws a box.
+-*-
+>
+PACKAGE
+!00000017
+cross package PACKAGE
+-*-
+^
+>
+CHANGED...
+!0000004E
+| changed... changed...
+
+The following entries have been altered recently.
+-*-
+v
+INTER
+!000003BD
+| inter
+
+INTERRUPTS
+Fifth has the ability to nicely handle interrupts.  Interrupt handling
+routines are built in a different way than normal colon definitions, and
+there are limits to what they can safely do.
+
+Interrupt handlers handle the appropiate interrupt as long as they are
+compiled.  Thus compiling a timer interrupt handler will cause the timer
+interrupt to be handled by your routine immediately.
+
+During interrupts, the stacks are swapped.  Thus parameters cannot be passed
+between an interrupt routine running in an interrupt and the Fifth system.
+To communicate interrupt events set flags in variables which are polled in
+foreground.
+
+When making a turnkey application that handles interrupts, be sure to
+reference the handler in the main routine somewhere, or the application
+generator may not include it in the final application.  ['] works nicely.
+Interrupt routines can be executed in the foreground as normal routines.
+-*-
+v
+INT
+!0000013F
+| INT
+
+INT
+(Registers Int -> Registers Flags) The registers are 8 16b values in this
+order: ES DS SI DI DX CX BX AX . Stack them as 4 32b values. Push all
+registers on the stack prior to using INT. The registers are loaded and the
+interrupt is called. The registers are pushed back on the stack with the
+flags.
+-*-
+>
+:INT
+!00000200
+| :int
+
+:INT
+( -> ) :INT is used to begin an interrupt handler.  It takes the interrupt
+number from the stack, but otherwise behaves like `:'.  The created module
+begins handling the named interrupt as long as it's compiled.  For example:
+
+        28 :int x 1 screen +! ;
+
+makes an interrupt handler named X, which handles interrupt 28 - the timer
+interrupt.  Now, 18 times a second, the character in the upper left corner of
+the screen will change.  This continues until the module X is uncompiled.
+-*-
+>
+INT;
+!000002B5
+| int;
+
+INT;
+( -> ) INT; is used to end an interrupt handler that should NOT pass control
+on the next interrupt handler in the chain.  It otherwise behaves like `;'.
+For example:
+
+        28 :int x 1 screen +! int;
+
+makes an interrupt handler named X, which handles interrupt 28 - the timer
+interrupt.  Now, 18 times a second, the character in the upper left corner of
+the screen will change.  This continues until the module X is uncompiled.
+However, the previous interrupt routine is NOT called.  This means that the
+time-of-day clock will NOT be updated.  When X is uncompiled or deleted, the
+orginal interrupt handler is re-installed, updating the time-of-day clock
+again.
+-*-
+>
+INT[
+!000002B9
+| int[
+
+INT[
+( -> ) INT[ turns interrupts off.  It is dangerous to leave interrupts
+disabled for any length of time.  You should restore interrupts with ]INT
+as soon as possible.
+
+Using INT[ and ]INT it is possible to guard a structure against simultaneous
+access by a foreground routine, and an interrupt handler.  For instance, to
+build a circular queue of keystrokes you don't want the keyboard interrupt
+disturbing the foreground routine as it pulls characters out of the
+queue.
+
+        : safe-access
+          int[          \ No interrupts
+          do-queue      \ Access queue, update queue tail pointer
+          ]int          \ Allow keyboard interrupt again
+        ;
+-*-
+>
+]INT
+!000000DE
+| ]int
+
+]INT
+( -> ) ]INT turns interrupts on.  It is dangerous to leave interrupts
+disabled for any length of time.  If you disabled interrupts with INT[,
+you should restore interrupts with ]INT as soon as possible.
+-*-
+>
+CTRL-C
+!00000089
+| ctrl-c
+
+CTRL-C
+( -> ) Causes a control-C interrupt to occur.  Fifth intercepts this
+interrupt and causes a Ctrl-C error to occur.
+-*-
+^
+>
+SNAPSHOT
+!00000131
+| SNAPSHOT
+
+SNAPSHOT
+( -> ) Saves the current Fifth environment to a disk file under the local
+module's name, with an .EXE extension. To re-load the environment, type it's
+name to MSDOS. If a .EXE file already exists when saving, it is renamed
+to .BAK. To make a turn-key application, use TURNKEY.
+-*-
+>
+SAVE
+!0000033E
+| SAVE
+
+SAVE
+(addr -> ) Saves the Fifth system in text-file format with a filename as the
+null-terminated string passed.  The local environment and all his children
+are saved. This format is capable of fast loading, using the LOAD module.
+
+The SAVE format is:
+        Module-name
+        !00000000               ( Text length in hexidecimal )
+        Text...                 ( Module's text )
+        -*-                     ( End of text signature )
+
+Then 1 of several symbols are possible:
+        >       - The next module is a brother to the previous.  A module
+                  must follow.
+        v       - The next module is a child of the previous.  A module
+                  must follow.
+        ^       - No more children in the module.  Can be followed by a `>'
+                  or another `^'.
+-*-
+>
+LOAD
+!0000019B
+| LOAD
+
+LOAD
+(addr -> ) Loads into the Fifth system a text-file format with a filename as
+the null-terminated string passed.  The load starts at the last child of the
+local environment.
+
+This form of loading is much faster than the old form. If you are attempting
+to load a source file that has been damaged, you can edit the file with a
+normal text editor.  See the help on SAVE for the file format.
+-*-
+>
+STATE
+!00000013
+cross state STATE
+-*-
+>
+STDIN
+!00000052
+| stdin
+
+STDIN
+( -> handle)  Returns the handle of the standard input stream.
+-*-
+>
+STDOUT
+!00000055
+| stdout
+
+STDOUT
+( -> handle)  Returns the handle of the standard output stream.
+-*-
+>
+GETOBJ
+!00000172
+| getobj
+
+GETOBJ
+(size -> obj)  Returns a dynamically allocated Fifth object of the given
+size.  The object is NOT part of the dictionary structure (as is true with
+NEW).  The object may be resized with SIZOBJ, or deleted with FREEOBJ.  An
+error will free up all dynamically allocated objects.
+
+GETOBJ is intended as an eventual replacement for the NEW module.
+-*-
+>
+SIZEOBJ
+!0000014E
+| sizeobj
+
+SIZEOBJ
+(obj size -> )  Resizes an object allocated with GETOBJ.  If the object grows
+in size, it's previous contents will be preserved.  If it shrinks as much of
+the contents as possible are preserved.  SIZEOBJ is fairly well optimized, so
+repeated uses of SIZEOBJ to incrementally grow an object are not too slow.
+-*-
+>
+FREEOBJ
+!00000147
+| freeobj
+
+FREEOBJ
+(obj -> )  Returns an object allocated with GETOBJ back to the free heap.  Do
+not use DISPOSE on objects allocated with GETOBJ, nor use FREEOBJ on objects
+allocated with NEW.  Any error will also free all dynmically allocated
+objects.
+
+FREEOBJ is designed to be an eventual replacement for DISPOSE.
+-*-
+>
+CPU
+!000000C5
+| CPU
+
+CPU
+( -> cpu-type)  Returns the CPU type.  Currently supported are 8088, 8086,
+80186, 80286, 80386 (all flavors return 8088) and 68000, 68010, 68020, 68030
+(returning 68000 or 68010).
+-*-
+>
+MATHCPU
+!000000CC
+| MATHCPU
+
+MATHCPU
+( -> math-coprocessor)  Returns the math coprocessor.  Currently supported
+are 8087, 80287, 80387 (all flavors return 8087).  No, or unrecognized math
+coprocessors return a zero.
+-*-
+^
+^
+^

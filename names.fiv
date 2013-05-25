@@ -1,0 +1,118 @@
+<N>
+!000001AA
+\ The names package for the diagnoser (sp?).  The two routines to be used
+\ by the rest of the world are s->n and n->s.  Given a string, s->n gives
+\ a unique pointer to that string. n->s converts the name back into a string.
+\ Note that this string cannot be changed!
+package <n>
+
+\     s->n      ( string -> name   )   Converts a string to a name.
+\     n->s      ( name   -> string )   Converts a name to a string.
+-*-
+v
+MAXNAMES
+!00000068
+\ maxnames is four times the number of maximum names allowed in the system.
+h# 8000 constant maxnames
+-*-
+>
+STRINGSPACE
+!00000152
+\ This is a data structure containing the strings for all names
+\ encountered to date. For now, we will use a fixed amount of space;
+\ Later we will allocate the memory as we need it.
+create stringspace
+4 ,                     \ Offset first string in the stringspace
+32768 allot             \ The rest of the possible stringspace.
+-*-
+>
+NAMESTABLE
+!00000117
+\ This is the name table.  Each unused entry is null; each
+\ used entry is an offset into the stringspace to the string for the name.
+create namestable
+maxnames allot                  \ Allocate the memory for the table.
+namestable maxnames erase       \ Erase all entries.
+-*-
+>
+S->N
+!00000518
+\ ( string -> name )
+\ This routine uses string to hash into the namestable, then looks for
+\ a match.  If it is not found, the string is added to the stringspace
+\ and the offset to the string is placed into the namestable. The offset
+\ into the namestable to the pointer to the string is the name returned.
+: s->n
+  namestable maxnames +                 \ The end of the table.
+  over hashstring namestable +          \ The starting point of our search.
+  do
+    i @ 0= if i addname i exit endif    \ Found a null entry? Then we done!
+    i @ stringspace + over cstr= if     \ Is this the name for which we search?
+      drop i exit                       \ If so, return the offset, and exit.
+    endif
+  4 +loop                               \ Loop by entry size.
+  dup hashstring namestable +           \ Wrap if at the end of the table.
+  namestable                            \ Start at the beginning of the table.
+  do
+    i @ 0= if i addname i exit endif    \ Found a null entry? Then we done!
+    i @ stringspace + over cstr= if     \ Is this the name for which we search?
+      drop i exit                       \ If so, return the offset, and exit.
+    endif
+  4 +loop                               \ Loop by entry size.
+  -1 abort" String to name conversion error."
+;
+-*-
+v
+ADDNAME
+!00000200
+\ ( string ptr -> )
+\ Add the string to the stringspace, and make the namestable entry pointed to
+\ by ptr point to the string.
+: addname
+  stringspace @                         \ Get the offset to the string
+  swap !                                \ Save offset into the namestable.
+  stringspace dup @ +                   \ Get address of where to put the str.
+  over c@ 1+ dup stringspace +! move    \ Increment stringspace end ptr, and
+;                                       \  copy in the string.
+-*-
+>
+HASHSTRING
+!000002E5
+\ ( string -> hash-key )
+\ string is a counted string.
+\ Takes the string and computes a reasonable hash key into the names table.
+: hashstring
+  0 swap                                \ Put the total on the data stack.
+  dup c@ over + 1+ swap do              \ Make my do loop index a pointer into
+    i c@ + 3 cshr                       \ the string. Add the ASCII value of
+  loop                                  \ each character, and circular shift
+                                        \ right by three.
+  dup 16 shr + h# 7FFC and              \ Patch up the offset.
+                                        \ (Mask to 32K, clear low two bits;
+;                                       \ we are assuming a 32K names table!!!)
+-*-
+>
+CSTR=
+!000001DE
+\ ( str1 str2 -> flg )
+\ Compares the counted strings str1 and str2. flg = -1 if equal, otherwise 0
+: cstr=
+  dup c@ 1+ 0 do                     \ Compare str2's count of characters.
+    count >r swap count r> = not if  \ Every character, includeing the count,
+      drop drop 0 exit               \ must be the same, or we exit with a
+    endif                            \ zero!
+  loop
+  drop drop -1                       \ All is the same, return strings equal!
+;
+-*-
+^
+>
+N->S
+!00000060
+\ ( name -> string )
+\ Converts the name into a counted string.
+: n->s
+  @ stringspace +
+;
+-*-
+^

@@ -1,0 +1,128 @@
+MANDEL
+!0000003B
+: mandel
+ gcls
+begin 1 while
+draw
+repeat
+key drop
+;
+-*-
+v
+XMAX
+!00000027
+( Maximum X value)
+320 constant xmax
+-*-
+>
+YMAX
+!00000013
+200 constant ymax
+-*-
+>
+GCLS
+!0000004A
+: GCLS  cls <graphics> 4 vmode
+        0 0 0 xmax 1- ymax 1- FILLBOX
+;
+-*-
+>
+DIS
+!00000029
+: dis
+
+8 0 do
+  i 0 palette
+loop
+;
+-*-
+>
+DRAW
+!00000289
+\ Exploring the Mandelbrot set
+: draw <float> <graphics>
+  x gx f- xc f!                 \ Compute X corner
+  xmax 0 do
+    y gy f- yc f!               \ Compute Y corner
+    gx xc f@ f+ xc f!           \ New X corner
+    ymax 0 do                   \
+      gy yc f@ f+ yc f!         \ New Y corner
+      0. fdup                   \ Stk: 0 0
+      64 cnt !
+      64 1 do
+        fover fover f* 2. f* yc f@ f+ yt f!
+        fdup f* fswap fdup f* fover fover f+
+        4. f> if fdrop fdrop i cnt ! leave endif
+        fswap f- xc f@ f+ yt f@
+      loop
+      cnt @ j i pset
+    loop  drop   ?term if key drop abort endif
+  loop
+;
+-*-
+v
+X
+!00000024
+\ Real part start
+-2. fconstant x
+-*-
+>
+Y
+!00000029
+\ Imaginary part start
+-2. fconstant y
+-*-
+>
+SX
+!00000026
+\ Size of real part
+4. fconstant sx
+-*-
+>
+SY
+!0000002B
+\ Size of imagniary part
+4. fconstant sy
+-*-
+>
+GX
+!00000038
+\ Real pixel gap
+<float> sx xmax i->f f/ fconstant gx
+-*-
+>
+GY
+!0000003D
+\ Imaginary pixel gap
+<float> sy ymax i->f f/ fconstant gy
+-*-
+>
+XC
+!00000032
+\ real corner of pixel in progress
+fvariable xc
+-*-
+>
+YC
+!00000037
+\ imaginary corner of pixel in progress
+fvariable yc
+-*-
+>
+CNT
+!00000037
+\ count of iterations until z explodes
+fvariable cnt
+-*-
+>
+XT
+!0000000E
+fvariable xt
+-*-
+>
+YT
+!0000000E
+fvariable yt
+-*-
+^
+^

@@ -1,0 +1,668 @@
+FORTH83
+!00000966
+(
+This program will convert a MVP-Forth-83 ASCII file to a Fifth file.  The file
+contains 64 bytes per line, with no CR/LF`s, 1024 bytes per block.  The file
+consists of concatenated screens.
+
+The conversion process is by no means complete.  Some of the worst errors may
+have to be editted out with a text editor before the file can be loaded into a
+Fifth system.  Once inside Fifth, several of the MVP functions are handled
+differently than Fifth.  Some of these are listed here:
+
+ Fifth requires 1 definition per module:  With Forth code it can be difficult
+   to tell which module a section of code belongs too.  This program guesses,
+   and may guess wrong.  Be especially wary of initilization code and comments,
+   which can end up in the wrong module.
+ VOCABULARIES:  Fifth uses a different structure than the standard VOCABULARY.
+   You may find it more convient to rewrite your program in Forth to remove
+   the VOCABULARY.  If you want to remove the VOCABULARY from Fifth, a good
+   understanding of Fifth's scoping is nessecary.
+ PFA, CFA:  Fifth dosn't deal with PFA and CFA addresses per se, close
+   inspection of the MVP code may be in order.
+ Recursion:  Fifth handles recursion automatically.  There is no need for a
+   word to allow recursion.
+ Clearing the screen, moving the cursor:  Fifth has a set of screen i/o
+   routines that use the IBM BIOS.  Some MVP functions use ANSI standard. This
+   requires ANSI.SYS in your CONFIG.SYS file during booting.
+ LOAD, --> : Fifth dosn't use screens and blocks.  If your file loads in other
+   than sequential order, this program get's in trouble!  It dosn't understand
+   references to screens and blocks, and will merrily put the commands with
+   some nearby module.
+ Forth-83 vs Forth-79:  Fifth is very close the the Forth-83 standard.
+   Differences between the standards may cause you problems.  For instance,
+   STACK? in Forth-79 causes an abort if the stack has underflowed, in Forth-83
+   STACK? leaves a flag on the stack.
+ Fifth vs Forth-83:  There are some name changes between Forth-83 and Fifth.
+   For instance THEN's in Forth-83 are ENDIF's in Fifth.
+
+Your own Forth system will undoubtly have a lot of kernal words not in the
+Fifth system.  If you are doing lots of conversions, you may want to build up
+a file of Fifth routines similiar to what's in your system.
+
+)
+: Forth83 doit ;
+-*-
+v
+DOIT
+!000001D9
+\ This routine asks for a file name, with an assumed extension of .4TH.  It
+\ opens this file, and the output file with extension .FIV.  Then does the
+\ conversion.
+: doit
+
+  open-file             \ Open both files
+
+  " CREATE FROM-83" 1+ wrtstr
+
+  conversion            \ Convert
+
+  " ABORT" 1+ wrtstr    \ Write the string, CR/LF terminated
+
+   in-file @ close if else drop endif
+  out-file @ close if else drop endif
+  cr cr ." Hit a key..." key drop
+;
+-*-
+v
+IN-FILE
+!00000027
+\ Input file handle
+variable in-file
+-*-
+>
+OUT-FILE
+!00000029
+\ Output file handle
+variable out-file
+-*-
+>
+OPEN-FILE
+!000003AE
+\ Asks for a name, then opens the file for reading.  Also opens the output file
+
+: open-file
+
+  begin                         \ Get names until <CR> or can open
+    ask-name cr                 \ Get name
+    name-buf 0 open if          \ Opened okay
+      in-file !                 \ Save input file handle
+      " .FIV" 1+                \ Output extension
+      name-buf len @ + 5 move   \ Fix filename
+      name-buf 0 createfile     \ Make output file
+      if out-file ! exit        \ Save handle, exit
+      else drop cr cr 7 emit    \ Can't create output file
+        ."           Can't make " name-buf len @ 4 + type ." !"
+        30000 0 do loop
+        in-file @ close if else drop endif
+      endif
+    else                        \ Can't open input file
+      drop cr cr 7 emit         \ Beep at 'em
+      ."           Can't find " name-buf len @ 4 + type ." !"
+      30000 0 do loop
+    endif
+  0 until
+;
+-*-
+v
+NAME-BUF
+!00000040
+\ This is the input file-name buffer
+create name-buf 60 allot
+-*-
+>
+LEN
+!00000026
+\ Length of typed name
+variable len
+-*-
+>
+ASK-NAME
+!00000399
+\ Politly ask for a file name
+: ask-name
+
+  cls 0 6 gotoxy
+  ."           The file name can be a complete path-name." cr
+  ."           An extension of .4TH is assumed for the input file, and" cr
+  ."           an extension of .FIV is assumed for the output file." cr
+  ."           Please enter a file name, or type <CR> to abort." cr cr
+  ."           Name: "
+  name-buf 50 expect
+  dup 0= if abort endif         \ Abort if CR hit
+  dup len !                     \ Store name length
+  ` . scan                      \ Look for a decimal
+  ?dup if                       \ Found one?
+    0 name-buf len @ + c!       \ Add a trailing null
+    1- len !                    \ Make LEN point to decimal
+  else                          \ Didn't find a decimal!
+    " .4TH" 1+ name-buf len @ + \ Compute where to put extension
+    5 move                      \ Put extension (+1 for trailing null)
+  endif
+;
+-*-
+^
+>
+WRTSTR
+!000001C6
+\ (addr -> ) Writes a null terminated string, and a CR/LF
+: wrtstr
+
+  dup -1 0 scan 1-              \ Length to write
+  out-file @ write if           \ Write it
+    drop                        \ Assume wrote okay length
+  else ." Error writing:" . cr  \ Write error
+  endif
+
+  crlf 2 out-file @ write if    \ Write CR/LF
+    drop                        \ Assume wrote okay length
+  else ." Error writing:" . cr  \ Write error
+  endif
+
+
+;
+-*-
+v
+CRLF
+!00000022
+\ CR/LF
+create crlf 13 c, 10 c,
+-*-
+^
+>
+STR=
+!0000018A
+\ Compare two null terminated strings, returns TRUE/FALSE
+\ (addr1 addr2 --> Flag)
+: str=
+
+  begin
+    dup c@ 2 pick c@ - if       \ Not equal chars?
+      drop drop 0 exit          \ Exit FALSE
+    endif
+    dup c@ while                \ While not end of string(s)
+    1+ swap 1+                  \ Bump to next char
+  repeat
+  drop drop 1                   \ Compared till EOS
+;
+-*-
+>
+CONVERSION
+!000010D8
+\ This module is the workhorse of the program.  It reads from the input file,
+\ converts, and writes to the output file.
+
+: conversion
+
+  2 create? 2 f83->5th          \ Reset CREATE list, Conversion list
+  modbuf modsiz !               \ Reset 1st module size
+  0 scanning c!                 \ Not scanning for end of comments
+  1 mode !                      \ Pre-module starting mode
+  inbuf inptr ! 0 inbuf !       \ Start at input start, input empty
+  0 linecnt ! 0 blockcnt !      \ Start at file start
+
+  begin                         \ Read all of input
+    ?stack abort" Stack underflow"
+    scanning c@ if              \ Scanning?
+      inptr @ 64 scanning c@ scan
+      dup if                    \ Found it? (Leave on stack)
+        dup inptr +!            \ Yes, bump input past it
+      endif                     \ Return EOL flag
+    else                        \ Not scanning, parse a word out
+      inptr @ i->d dup >r >in ! \ Setup as input stream, leave on stack
+      0 word dup token ! c@     \ Parse & store the token, return EOL flag
+      >in @ r> - inptr +!       \ Advance inptr by as much
+    endif                       \ Stack contains EOL flag
+
+    0= if                       \ True if EOL
+      mode @ 3 = if             \ Looking for EOL at definition end?
+        wrimod 1 mode !         \ Write the finished module, reset mode
+      endif                     \
+      inquery 0= if             \ Read a new line, EOF?
+        Eof-error               \ Eof error handling
+        exit                    \ End of File, End of Routine, Exit!
+      endif
+    else                        \ Not an EOL
+      scanning c@ if            \ Was scanning?
+        0 scanning c!           \ Yes, found scan char so stop
+      else mode @ 3 > if        \ Mode=4,5? Looking for a module name?
+        modname 7 + token @ count 1+ stack abc|bac move  \ Copy into MODNAME
+        mode @ 4 = if           \ CONSTANT or VARIABLE?
+          3                     \ Yes, mode is End-Of-Module to End-Of-Line
+        else 2 endif            \ Must have been a colon defintion, find code
+        mode !                  \ Set new mode
+      else                      \ Just a generic token, interpret it
+        token @ dup " \" str= if        \ Token is a backslash comment?
+          drop inbuf inptr ! 0 inbuf !  \ Wipe out rest of line
+        else dup str1 str=              \ Token is dot-quote?
+            over str2 str= or if        \       or quote?
+          drop ` " scanning c!          \ Yes, scanning for closing quote
+        else dup dup " .(" str= swap " (" str= or if
+          drop ` ) scanning c!          \ Yes, scanning for closing paren
+        else dup " ;" str= if           \ Token is semi-colon?
+          drop mode @ 2 = if 3 mode ! endif \ Yes, mark end of module def
+        else                            \ Nice token
+          token @ 0 f83->5th            \ Convert to 5th token, if needed
+          0 create? if                  \ Creating word?
+            mode @ dup 1 = if drop      \ Local for a module start?
+              token @ dup 1 f83->5th    \ Remove personal def's from list
+              " :" str= if              \ Colon definition?
+                5                       \ Yes, use colon definition mode
+              else 4 endif              \ No, CONSTANT, CREATE, VARIABLE mode
+              mode !                    \ Set new mode
+            else 2 = if                 \ Mode = 2? Module can create modules?
+              modname 7 + i->d >in !    \ Store module name in input stream
+              0 word 1 create?          \ Parse, pass length-byte string to C?
+            else                        \ Mode = 3! Multiple def's per line
+              token @ count negate inptr +! drop    \ Back up input pointer
+              inptr @ inbuf - modline @ + modsiz !  \ Back up module size
+              0 modsiz @ c! wrimod      \ End module here (not at EOL), write
+              inptr @ modline @         \ Src, Dest
+              inptr @ -1 0 scan move    \ Characters to move
+              1 mode !                  \ Ready for next module
+            endif endif
+          endif
+        endif endif endif endif
+      endif endif
+    endif
+
+  0 until
+
+
+;
+-*-
+v
+LINECNT
+!0000002C
+\ Count of line in block
+variable linecnt
+-*-
+>
+BLOCKCNT
+!0000002D
+\ Count of block in file
+variable blockcnt
+-*-
+>
+MODNAME
+!0000008E
+\ Module name buffer
+create MODNAME
+` C c,
+` R c,
+` E c,
+` A c,
+` T c,
+` E c,
+ 32 c,
+  0 c,  \ Module name starts here...
+80 allot
+-*-
+>
+INBUF
+!0000002F
+\ Input & parse buffer
+create inbuf 80 allot
+-*-
+>
+INPTR
+!00000028
+\ Input buffer pointer
+variable inptr
+-*-
+>
+MODBUF
+!00000035
+\ Accumalted module code
+create modbuf 10000 allot
+-*-
+>
+MODSIZ
+!00000023
+\ Size of MODBUF
+variable modsiz
+-*-
+>
+MODLINE
+!00000057
+\ Start of last line read into MODBUF, multple definitions per line
+variable modline
+-*-
+>
+MODE
+!00000031
+\ State of my state machine, 1-4
+variable mode
+-*-
+>
+SCANNING
+!00000061
+\ Contains a end-comment character, if I'm scanning for the end if a comment
+variable scanning
+-*-
+>
+INQUERY
+!00000321
+\ This module reads a 64 byte line into the input buffer, after appending
+\ a CR/LF.  WORD and TEXT may be used to parse out the input.  It returns a
+\ true, or a false at end-of-file or other read error.
+: inquery
+
+  linecnt @ 1+ dup 15 > if
+    drop 1 blockcnt +! 0
+    10 12 gotoxy ." Block: " blockcnt @ .
+  endif linecnt !
+  inbuf 64 in-file @ read if    \ Read a line
+    dup 0= if exit endif        \ EOF detection, return a zero
+    dup end-line                \ Strip trailing whitespace, add cr/lf
+    64 = if                     \ Short read?
+      1                         \ No, alls fine, exit.
+    else ." Input file size not a multple of 64 bytes." cr 1
+    endif                       \ Return, keep reading
+  else ." Error reading input file: " . cr 0
+  endif
+
+;
+-*-
+v
+END-LINE
+!000003A4
+\ (size -> ) Remove trailing whitespace from an input line, null terminate
+: end-line
+
+  dup inbuf +                   \ Generate end-buffer address
+  swap ?dup if                  \ Check for short line
+    0 do                        \ Till non-space
+      1-                        \ Pre-decrement
+      dup c@ 32 = not           \
+      if 1+ leave endif         \ Until not a space
+    loop
+  endif
+  13 over c! 1+                 \ Add missing CR/LF
+  10 over c! 1+                 \
+  0 over c!                     \ Store null
+  inbuf -                       \ Size of line just read
+  dup modsiz @ modbuf - + 10000 > abort" Module greater than 10000 chars!"
+  modsiz @ dup modline !        \ Store start of new line
+  inbuf stack abc|acba 1+ move  \ Account for trailing null, copy into MODBUF
+  modsiz +!                     \ Advance by size
+  inbuf inptr !                 \ Setup as input stream
+;
+-*-
+^
+>
+CREATE?
+!000004E6
+\ Tests for, or adds a token to the CREATE list
+\ (     2 ->     ) Inits CREATE list
+\ (addr 1 ->     ) Adds token to CREATE list
+\ (addr 0 -> flag) Tests for token in CREATE list
+: create?
+
+  dup 2 = if drop       \ Initing CREATE list
+    clist csize !       \ Zero size
+    " :"          1 create?     \ Add colon
+    " CONSTANT"   1 create?     \ Add CONSTANT
+    " VARIABLE"   1 create?     \ Add VARIABLE
+    " CREATE"     1 create?     \ Add CREATE
+    " VOCABULARY" 1 create?     \ Add VOCABULARY
+  else if               \ Adding?
+    count 1+ dup >r     \ Get size, adding for trailing null
+    csize @ swap move   \ Copy into buffer
+    r> csize +!         \ Bump by size
+  else                  \ Must be checking
+    1+ clist            \ Skip past size byte, start at start
+    begin               \ Loop thru all
+      dup csize @ < while       \ While not past end of list
+      stack ab|abab str= if     \ Test for string equality
+        drop drop 1 exit        \ YES! Found it, so return TRUE.
+      endif             \ Oops, not today...
+      dup 1000 0 scan + \ Skip to next string
+    repeat              \ Repeat search
+    drop drop 0         \ Drop failed search string, exit FALSE
+  endif endif
+
+;
+-*-
+v
+CLIST
+!00000038
+\ List(s) of CREATE'ing words
+create clist 1000 allot
+-*-
+>
+CSIZE
+!00000020
+\ Size of list
+variable csize
+-*-
+^
+>
+WRIMOD
+!0000013C
+\ Write the module in MODBUF to the disk.
+: wrimod
+  modname wrtstr                \ Write the 'CREATE modname'
+  " EDIT" 1+ wrtstr             \ Write EDIT
+  modbuf wrtstr                 \ Write module body
+  tildeup wrtstr                \ Write tildeUP
+  modbuf dup modsiz ! modline ! \ Reset MODBUF
+
+;
+-*-
+v
+TILDEUP
+!00000068
+\ We can't have a tilde in the source file, so I cheat here
+create tildeup
+126 c, ` U c, ` P c, 0 c,
+-*-
+^
+>
+TOKEN
+!00000036
+\ This is the parsed token from WORD
+variable token
+-*-
+>
+EOF-ERROR
+!00000425
+\ End of file error handling
+: Eof-error
+
+  cr scanning c@ ?dup if                \ Scanning?
+    ." Error: End of file before closing " emit ." ."
+  else
+    mode c@ dup 1 = if                  \ Looking for a new module?
+      ." Finished conversion."          \ No error.
+    else dup 2 = if                     \ In the middle of a defintion?
+      ." Error: Module "
+      modname 7 + dup 80 0 scan 1- type \ Module name under construction
+      ."  definition not completed."
+    else dup 3 = if                     \ Internal error
+      ." Internal Error: Mode = 3 on EOF."
+    else dup 4 = if                     \ Ended between creater & name
+      ." Error: End of file before "
+      token @ count type ."  finds a name to define."
+    else dup 5 = if                     \ Ended between colon & name
+      ." Error: End of file before : finds a name to define."
+    else                                \ Bad mode
+      ." Internal Error: Mode = " mode @ .
+    endif endif endif endif endif drop  \ Drop mode
+  endif
+  cr
+;
+-*-
+>
+F83->5TH
+!00000902
+\ Converts a Forth-83 word to it's Fifth word, if needed. Also removes peronal
+\ definitions from list.
+\ (     2 -> ) Inits Convert list
+\ (addr 1 -> ) Removes token from Convert list
+\ (addr 0 -> ) Converts token in module buffer
+: f83->5th
+
+  dup 2 = if drop clist \ Initing Conversion list
+    " THEN"  " endif" add              \ The first string MUST be uppercase.
+    " PAGE"  " cls" add                \ The second string can be anything, but
+    " DDUP"  " stack ab|abab" add      \   I'm using lowercase to distinguish
+    " ROT"   " stack abc|bca" add      \   it from the original code.
+    " 2*"    " 1 shl" add
+    " /LOOP" " +loop" add
+    0 swap !            \ End list with nulls
+  else if               \ Removing?
+    clist begin         \ Search for token
+      dup c@ while      \ While not at end of list
+      stack ab|abab str= if     \ Test for string equality
+        1+ 32 swap c! drop      \ Blank out first character
+      endif             \ Oops, not today...
+      count + 1+ count + 1+     \ Skip to next string pair
+    repeat              \ Repeat search
+    drop drop           \ Drop failed search string, exit
+  else                  \ Must be Converting
+    clist               \ Start at start
+    begin               \ Loop thru all
+      dup c@ while      \ While not at end of list
+      stack ab|abab str= if     \ Test for string equality
+        stack ab|bb c@ modsiz @ inptr @ -1 0 scan 1- -
+        stack ab|abba - dup >r      \ Stack: otok osiz src dest, Return: dest
+        modsiz @ 2 pick - 1+ dup >r \ Stack: otok osiz src dest len
+        move                        \ Remove old stuff,  stack: otok osiz
+        negate modsiz +!            \ Shrink module size by removed token
+        count + 1+                  \ Move to new (replacement) token
+        count dup modsiz +!         \ Add new token size to module length
+        r> r> stack abcd|adbdcdb +  \ Stack: newtok dest osiz dest len dest+osi
+        swap move  move             \ Insert a hole, copy token inline
+        exit
+      endif             \ Oops, not today...
+      count + 1+ count + 1+     \ Skip to next string pair
+    repeat              \ Repeat search
+    drop drop           \ Drop failed search string, exit
+  endif endif
+
+;
+-*-
+v
+CLIST
+!00000037
+\ List(s) of Convert'd words
+create clist 1000 allot
+-*-
+>
+ADD
+!000000F4
+\ Add a conversion pair to the conversion list
+\ (ptr F83-str 5th-str -> ptr' )
+: add
+  swap dup c@ 2+ stack abcd|badcad move  +      \ Copy inline, advance ptr
+  swap dup c@ 2+ stack abc|acbac move  +        \ Copy inline, advance ptr
+;
+-*-
+^
+>
+STR1
+!00000049
+\ dot-quote string literal
+create str1
+  2 c,
+` . c,
+` " c,
+  0 c,
+-*-
+>
+STR2
+!0000003D
+\ quote string literal
+create str2
+  1 c,
+` " c,
+  0 c,
+-*-
+>
+NOTES2
+!00000D39
+create notes2 exit
+
+This is the state machine for the conversion:
+        1: Accumulating whitespace and intro material prior to a module.
+        2: Parsing the 'guts' of a colon definition.
+        3: Found the end of a definition, comments to EOL are included with
+           this module.  A creating word will end this module before the EOL.
+        4: Have found creating word, looking for new module's name.
+        5: Found a `:', looking for new module's name.
+        ): Found a `(' or a `.(' comment, skipping to `)'
+        ": Found a ." , skipping to a "
+
+Loop:
+  If Scanning then Scan for character.
+  else Parse a word.
+
+  If EOL then
+    if Mode==3 then
+      Write local module; mode := 1;
+    endif
+    Read line
+    if EOF then
+      1:
+      2: Error: End in middle of definition xxx.
+      3: Internal error
+      4: Error: File ends before xxx finds a name to define.
+      5: Error: File ends before `:' finds a name to define.
+      ): Error: File ends before closing `)'
+      ": Error: File ends before closing `"'
+
+      If Mode!=1 then Write local module
+      Write root module
+      Exit. Done. Fina.
+    endif
+    Copy line to MODBUF.
+  else                          ; Parse/scan worked
+    if Scanning then            ; Scanning?
+      Scanning := FALSE         ; Found end of comment
+    else if Mode >= 4 then      ; Was parsing module name?
+      MODNAME := token;         ; Got module name
+      if Mode == 4 then         ; CONSTANT or VARIABLE...
+        Mode := 3;              ; End of module
+      else                      ; Must have been `:'
+        Mode := 2;              ; Find module gut's
+      endif                     ;
+    else                        ; No comment or module name parsing...
+      if token == `\' then      ; Line comments
+        Force EOL               ; Skip to EOL
+      else if token == `."' or `"' ; b type scan ?
+        Scanning := `"'         ; Begin " type scan
+      else if token == `(' or `.(' ; a type scan ?
+        Scanning := `)'         ; Begin ) type scan
+      else if token == `;' then ; End of a colon definition?
+        if Mode==2 then         ; During a colon definition?
+          Mode := 3             ; End module
+        endif                   ; Nope, ignore
+      else                      ;
+        Convert F83->5th token  ;
+        if Creating word then   ; Starting a defintion?
+          if Mode == 1 then     ; Looking for a module start?
+            Remove from F83->5th; He's defining a Forth word, don't convert it
+            if token == `:' then; Start of colon definition?
+              Mode := 5;        ; Look for it's name
+            else                ; Must be CONSTANT or VARIABLE
+              Mode := 4;        ; Look for it's name
+            endif               ;
+          else if Mode == 2 then; Found a CREATE inside a colon definition?
+            Make MODNAME a creating word
+          else                  ; Must be Mode == 3, two definitions per line
+            Backup parse before token
+            Shorten MODBUF      ;
+            Write local module  ;
+            Copy end of MODBUF to start of MODBUF
+            Mode := 1           ;
+          endif endif
+        endif
+      endif endif endif endif
+    endif endif
+  endif
+pooL                            ; End of Loop
+-*-
+^
+^
+^

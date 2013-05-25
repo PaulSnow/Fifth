@@ -1,0 +1,19 @@
+X
+!0000014E
+\ This program un-WordStar's a file - it strips the high bit from every
+\ character.  To use it, make a TURNKEY application.  From MS-DOS, redirect
+\ the input and output streams: "x < wordstar.fil > unword.txt"
+: x
+  begin
+    char 1 0 read and while
+    char c@ 127 and char c!
+    char 1 1 write drop drop
+    repeat
+  ;
+-*-
+v
+CHAR
+!0000000F
+variable char
+-*-
+^

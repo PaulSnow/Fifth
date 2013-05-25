@@ -1,0 +1,40 @@
+X
+!00000012
+: x time_print ;
+-*-
+v
+TIME
+!00000264
+\ Returns the time in hundreths of a second.
+16 base !
+: time
+\ es  ds    si  di    dx  cx    bx  ax   int
+  00000000  00000000  00000000  00002C00 21  int       \ get time.
+  stack abcde|c                 \ get rid of bogusness
+  [ decimal ]
+  dup 16 shr swap 16 shl +      \ Yields time in hour.min.sec.100th
+  dup 255 and                                   \ Hundreths,
+  over  8 shr 255 and 100 * +                   \ Secs -> 100ths  and add,
+  over 16 shr 255 and 100 * 60 * +              \ Mins -> 100ths  and add,
+  swap 24 shr 255 and 100 * 60 * 60 * +         \ Hrs  -> 100ths  and add.
+;
+-*-
+>
+TIME_PRINT
+!000001F3
+\ Prints the time in the format >>--> Hours:minutes:seconds:100ths
+16 base !
+: time_print
+\ es  ds    si  di    dx  cx    bx  ax   int
+  00000000  00000000  00000000  00002C00 21  int       \ get time.
+  stack abcde|c                                        \ get rid of bogusness
+  [ decimal ]
+  dup 16 shr swap 16 shl +
+  <# dup 255 and # # drop 8 shr 46 hold
+     dup 255 and # # drop 8 shr 58 hold
+     dup 255 and # # drop 8 shr 58 hold
+     dup 255 and # # drop 8 shr
+  #> type
+;
+-*-
+^

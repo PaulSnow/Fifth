@@ -1,0 +1,35 @@
+BENCH1
+!000000FE
+: BENCH1
+  FLAGS SIZE 1 FILL
+  0 SIZE 0
+  DO  FLAGS I + C@
+      IF    I DUP + 3 + DUP I +
+            BEGIN     DUP SIZE <
+            WHILE     0 OVER FLAGS + C! OVER +
+            REPEAT    DROP DROP 1+
+      ENDIF
+  LOOP
+  . ." Primes " ;
+-*-
+v
+SIZE
+!00000014
+8190 constant size
+-*-
+>
+FLAGS
+!0000001A
+create flags
+size allot
+-*-
+>
+10TIMES
+!0000002D
+: 10times
+  10 0 do
+    bench1
+  loop
+;
+-*-
+^

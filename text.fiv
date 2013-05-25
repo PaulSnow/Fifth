@@ -1,0 +1,139 @@
+X
+!00000112
+\ Executing any text module ( one defined with | ) will create a file
+\ and write out all text of the executed module and all modules below it.
+\
+\ For example, exeucting document gives the entire document.  Executing
+\ CHAPTER1 only writes out that chapter.
+create x
+-*-
+v
+|
+!000002EA
+: |
+  >in @
+  create
+  >in !
+  ' ,                           \ Save execution address.
+  77777777 ,                    \ Safety flag.
+  >in @ ,                       \ Save the address of text stream.
+
+  0                             \ The initial count of the bytes.
+  >in @                         \ Get the pointer to the text.
+  begin
+    dup c@@                     \ Is it zero?
+  while                         \ While not null, increment the pointer.
+    1+ swap 1+ swap             \ Increment the count and address.
+  repeat
+  >in !                         \ point text pointer to null.
+  ,                             \ Save the byte count.
+does>
+  @ p                           \ Get execution address and print.
+;
+-*-
+v
+NAME
+!00000073
+( EXEC -> string )
+: name cls 20 10 gotoxy
+  ." Please enter a filename: "
+  pad 40 expect over + 0 swap c!
+;
+-*-
+>
+H
+!0000000F
+create h 99 ,
+-*-
+>
+P
+!00000100
+\ ( document execution addr -> )
+: p
+        ?dup if else exit endif
+        dup name 32 createfile
+        if h ! else ." Can't open output file!" abort endif
+        dup >body print
+        child     print_all
+        h @ close ?dup drop drop
+;
+-*-
+v
+PRINT
+!00000232
+: PRINT
+        4 +
+        dup @ 77777777 = not abort" Invalid text word "
+        dup 8 + @ swap 4 + @             \ Get length, address.
+        over 0 do                        \ For all characters,
+          dup c@@ buffer i + c! 1+       \ Stack: buffer buffer length address.
+        loop
+        drop                             \ Drop the address.
+        buffer swap h @                  \ Buffer_addr  count  handle
+        write if drop
+        else
+           ." Write error... ( {PRINT} in {P} )" abort
+        endif
+        ." <"
+;
+-*-
+v
+BUFFER
+!0000001F
+create buffer 40 1024 * allot
+-*-
+^
+>
+PRINT_ALL
+!0000009C
+: print_all
+        ?dup if else exit endif
+        dup comp
+        dup >body   print
+        dup child   print_all
+            next    print_all
+;
+-*-
+^
+^
+>
+DOCUMENT
+!00000048
+| document
+
+        An Example Document
+        -- ------- --------
+-*-
+v
+CHAPTER1
+!00000086
+| chapter1
+
+            Chapter 1
+
+In this chapter we will explain the
+various meanings to life, the universe,
+and everything.
+-*-
+>
+CHAPTER2
+!0000006E
+| chapter2
+
+            Chapter 2
+
+This section is about a young boy,
+and his trials in becoming a man.
+-*-
+>
+CHAPTER3
+!0000005F
+| chapter3
+
+            Chapter 3
+
+Here we give up any pretence of trying
+to make sense.
+-*-
+^
+^

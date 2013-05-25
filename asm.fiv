@@ -1,0 +1,2575 @@
+ASM[
+!000001E2
+\ FORTH 8088/8087 ASSEMBLER     PHIL KOOPMAN JR.     LAST UPDATE: 9/2/86
+\
+\ (C) COPYRIGHT 1986 BY PHIL KOOPMAN JR.
+\ Modifed 2/5/87 by CLICK Software to run under Fifth 2.5
+\
+\ The contents of this file are released without restrictions.
+\ Acknowledgement of its use would be appreciated.
+: asm[
+  [compile] here-be-stuff       \ Setup the package
+  [compile] [                   \ Turn compiler off
+  reset                         \ Reset, ready assembler
+; immediate
+-*-
+v
+HEX
+!00000013
+: hex 16 base ! ;
+-*-
+>
+XX@
+!0000001B
+( ADDR -> N )
+: xx@ w@ ;
+-*-
+>
+XX!
+!0000001B
+( N ADDR -> )
+: xx! w! ;
+-*-
+>
+XXC@
+!0000001C
+( ADDR -> B )
+: xxc@ c@ ;
+-*-
+>
+XXC!
+!0000001C
+( B ADDR -> )
+: XXC! c! ;
+-*-
+>
+XX+!
+!00000033
+( N ADDR -> )
+: XX+! stack ab|bab w@ + swap w! ;
+-*-
+>
+XXHERE
+!00000013
+: XXHERE  here  ;
+-*-
+>
+XXALLOT
+!00000022
+: XXALLOT   ( N -> )
+  allot
+;
+-*-
+>
+XXC,
+!0000001C
+: XXC,   ( B -> )
+  c,
+;
+-*-
+>
+XX,
+!0000001B
+: XX,   ( N -> )
+  w,
+;
+-*-
+>
+ERROR-CHECK
+!000001B2
+\ ERROR CHECKING ASSISTANCE   -- COMPILE CALL TO RUN-TIME CHECK
+\ #IN = max # stack parameters expected for input
+\ #OUT = max # stack parameters expected for output
+\ Comment out to remove
+: ERROR-CHECK  ( #IN #OUT -> )
+   compile check                \ Compile a call to CHECK
+   OVER -  0 MAX  2 shl XXC,    \ # Bytes stack growth for output
+   2 shl XXC,                   \ # Bytes needed on stack for input
+; immediate
+-*-
+v
+CHECK
+!00000148
+\ Check the stack for proper balance
+\ Remove stack growth needed & desired from return address
+: check
+  r>                    \ Get return address
+  dup c@@ drop          \ Get stack growth needed
+  1+ dup c@@ drop       \ Get bytes needed for input
+  1+ >r                 \ Push modified return address back, exit
+;
+-*-
+^
+>
+STATUS-WORD
+!00000052
+( ASSEMBLER VARIABLES )
+VARIABLE STATUS-WORD      \ SOURCE & DEST OPERAND TYPES
+-*-
+>
+SOURCE-REG
+!0000002F
+VARIABLE SOURCE-REG       \ SOURCE REG NUMBER
+-*-
+>
+DEST-REG
+!0000002D
+VARIABLE DEST-REG         \ DEST REG NUMBER
+-*-
+>
+SOURCE-VALUE
+!0000003B
+VARIABLE SOURCE-VALUE     \ IMMEDIATE/DIRECT/OFFSET VALUE
+-*-
+>
+DEST-VALUE
+!0000003B
+VARIABLE DEST-VALUE       \ IMMEDIATE/DIRECT/OFFSET VALUE
+-*-
+>
+AUX-VALUE
+!00000034
+VARIABLE AUX-VALUE        \ USED FOR FAR ADDRESSES
+-*-
+>
+LENGTH-WORD
+!00000041
+VARIABLE LENGTH-WORD      \ FLAG BITS TO DETERMINE OPERAND TYPE
+-*-
+>
+OLD-DEPTH
+!00000035
+VARIABLE OLD-DEPTH        \ DATA STACK POINTER SAVE
+-*-
+>
+ILLEGAL-OPS?
+!00000038
+( FLAG -> )
+: ILLEGAL-OPS? ABORT" ILLEGAL OPERANDS" ;
+-*-
+>
+ILLEGAL-OPS
+!00000039
+( -> )  ( FORCE ERROR )
+: ILLEGAL-OPS 1 ILLEGAL-OPS? ;
+-*-
+>
+UPDATE-FLAGS
+!00000082
+: UPDATE-FLAGS   ( LENGTH-BITS  STATUS-BITS -> )
+  STATUS-WORD W@  OR   STATUS-WORD W!
+  LENGTH-WORD W@  OR   LENGTH-WORD W! ;
+-*-
+>
+PARAMS?
+!00000079
+: PARAMS?  ( -> #PARAMS )   ( TRUE IF IMMED/DIR PARAM ON STACK )
+  DEPTH  OLD-DEPTH w@ -
+   DUP    0< ILLEGAL-OPS?  ;
+-*-
+>
+DISP8,
+!00000035
+ ( JMPADDR  -> )
+: DISP8, XXHERE  1+   -   XXC,  ;
+-*-
+>
+DISP16,
+!00000032
+( JMPADDR  -> )
+: DISP16, XXHERE 2+  -   XX,  ;
+-*-
+>
+?W
+!0000005E
+hex
+: ?W   ( -> W=0/1 )
+    LENGTH-WORD w@ DUP  0FC AND     ILLEGAL-OPS?
+     2 = 1 and ;
+-*-
+>
+BYTESWAP
+!0000009D
+hex
+: BYTESWAP [
+  1 1 ERROR-CHECK
+  8B C, 46 C, 00 C, \ AX , 0 [BP] MOV
+  86 C, E0 C,       \ AH , AL XCHG
+  89 C, 46 C, 00 C, \ 0 [BP] , AX MOV
+] ;
+-*-
+>
+STATUS-LOW
+!0000004F
+HEX
+: STATUS-LOW   ( -> LOW.STATUS.BYTE.0->FF )
+  STATUS-WORD w@  0FF AND ;
+-*-
+>
+STATUS-HIGH
+!00000058
+hex
+: STATUS-HIGH   ( -> HIGH.STATUS.BYTE.0000->FF00 )
+  STATUS-WORD w@  0FF00 AND ;
+-*-
+>
+?D
+!000001AD
+( ?D  ?REG )
+HEX
+: ?D   ( -> D=0/1 )  ( 0=SOURCE IS REG/ 1= DEST IS REG )
+  STATUS-LOW     10 AND  IF    ( DEST IS SEG REG )  1   ELSE
+  STATUS-HIGH  1000 AND  IF  ( SOURCE IS SEG REG )  0   ELSE
+  STATUS-HIGH  0400 AND  IF  ( SOURCE IS IMMEDIATE ) 0  ELSE
+  STATUS-LOW     80 AND  IF    ( DEST IS REG )      1   ELSE
+  STATUS-HIGH  8000 AND  IF  ( SOURCE IS REG )      0   ELSE
+   1   endif endif endif endif endif   ;
+-*-
+>
+?REG
+!0000004F
+: ?REG   ( -> REG-VALUE )
+  ?D  IF  DEST-REG  ELSE  SOURCE-REG  endif   w@ ;
+-*-
+>
+?FD
+!000000AF
+HEX
+: ?FD   ( -> D=0/1 )  ( 0=DEST IS ST[0] / 1= SOURCE IS ST[0] )
+  STATUS-LOW     08 AND  IF   DEST-REG w@ 0=
+  IF  ( DEST IS ST[0] ) 0  ELSE 1 endif
+  ELSE  1 endif ;
+-*-
+>
+?FREG
+!00000079
+: ?FREG  ( -> REG# )
+  SOURCE-REG w@ 0= NOT   DEST-REG w@ 0= NOT  AND  ILLEGAL-OPS?
+  SOURCE-REG w@ DEST-REG w@ OR  ;
+-*-
+>
+<?MOD-R/M>
+!00000227
+HEX
+: <?MOD-R/M>   ( STATUS-BYTE -> MODXXR/M )
+  DUP  80 AND  IF   ( REGISTER )   DROP   0C0
+       ?D  IF  SOURCE-REG  ELSE  DEST-REG endif  w@  OR
+  ELSE   DUP  60 AND  20 =
+     IF   ( DIRECT )   DROP  06
+     ELSE    DUP 40 AND  0=  ILLEGAL-OPS?
+       ( INDIRECT )  ?D   IF  SOURCE-REG w@  SOURCE-VALUE w@
+       ELSE  DEST-REG w@  DEST-VALUE w@   endif
+       stack abc|bca   20 AND
+       IF  FF80 AND   DUP  0=  SWAP FF80 =  OR
+          IF  ( 8-BIT ) 40 OR  ELSE ( 16-BIT ) 80  OR endif
+       ELSE  DROP endif
+  endif endif  ;
+-*-
+>
+?MOD-R/M2
+!0000007D
+HEX
+: ?MOD-R/M2  ( -> MODXXXR/M )  ( FOR 2 OPERAND CASE )
+  STATUS-WORD w@  ?D  IF  BYTESWAP  endif  0FF AND <?MOD-R/M> ;
+-*-
+>
+?MOD-R/M1
+!0000007A
+: ?MOD-R/M1  ( -> MODXXXR/M )  ( FOR 1 OPERAND CASE )
+   SOURCE-REG w@  DEST-REG w!  STATUS-HIGH BYTESWAP  <?MOD-R/M> ;
+-*-
+>
+?MOD-R/M2-REG
+!00000076
+: ?MOD-R/M2-REG  ( -> MODXXXR/M ) ( 2 OPERANDS, BUT USE REG )
+  DEST-REG w@ SOURCE-REG w!  STATUS-LOW  <?MOD-R/M> ;
+-*-
+>
+?OFFSET,
+!00000190
+( ?OFFSET,    DATA, )
+HEX
+: ?OFFSET,   ( -> )
+  ( COMMA'S OFFSET ONLY IF NEEDED IN ASSEMBLED FORMAT )
+  STATUS-WORD w@  2020 AND   DUP  2020 = ILLEGAL-OPS?
+  ?DUP   IF  ( OFFSET INFORMATION APPLICABLE )
+  20 AND   IF  DEST-VALUE  w@  ELSE  SOURCE-VALUE  w@  endif
+  STATUS-WORD w@ 4040 AND  IF  DUP  FF80 AND  DUP FF80 =  SWAP 0=
+   OR  IF  XXC,  ELSE XX,  endif  ELSE  XX,  endif  endif  ;
+-*-
+>
+DATA,
+!0000009F
+hex
+: DATA,   ( N -> )
+   ( COMMA 1 OR 2 BYTES ACCORDING TO W )
+  ?W IF  XX,
+  ELSE    DUP  FF00  AND   ( TOO LONG? )  ILLEGAL-OPS?
+    XXC,   endif   ;
+-*-
+>
+?Q
+!000000C2
+HEX
+: ?Q   ( ->  0/1  )  ( 0=TO ACCUM/1= FROM ACCUM )
+  STATUS-LOW  80 =   DEST-REG w@ 0=  AND
+  IF  0
+  ELSE   STATUS-HIGH  8000 =
+    SOURCE-REG w@ 0=  AND  0= ILLEGAL-OPS?  1   endif ;
+-*-
+>
+?V
+!000000CE
+hex
+: ?V   ( -> 0=SHIFT COUNT 1/1=SHIFT COUNT CX )
+  STATUS-HIGH  8000 =   SOURCE-REG w@  1 =  AND
+  IF  1
+  ELSE   STATUS-HIGH  2000 =   SOURCE-VALUE w@ 1 =  AND
+     0=  ILLEGAL-OPS?    0   endif ;
+-*-
+>
+?MF
+!000000F1
+( ?MF   ?DF )
+HEX
+: ?MF   ( -> TYPE-OF-OPERANDS )
+  LENGTH-WORD w@   DUP   10 =
+  IF  DROP 0
+  ELSE  DUP  4 =    IF DROP 1
+    ELSE  DUP 20 =    IF DROP 2
+      ELSE 2 =   IF   3
+        ELSE ILLEGAL-OPS   endif endif endif endif ;
+-*-
+>
+?DF
+!0000007A
+: ?DF   (  ->  0=DEST ST/1=DEST STi )
+  STATUS-WORD w@   808 AND   0=  ILLEGAL-OPS?
+  STATUS-WORD  w@    8 AND  NOT  ;
+-*-
+>
+#
+!00000058
+( #    GET-STACK-PARAMS )
+( -> )
+HEX : # STATUS-WORD  w@   400 OR   STATUS-WORD w! ;
+-*-
+>
+GET-STACK-PARAMS
+!00000121
+hex
+: GET-STACK-PARAMS   ( N? -> )
+  PARAMS?
+  IF    SOURCE-VALUE w!
+     STATUS-WORD w@    400 AND  0=
+     IF   2000 STATUS-WORD w@ OR  STATUS-WORD w!  endif endif
+  PARAMS?
+  IF    AUX-VALUE w!
+    STATUS-WORD w@   200 OR   STATUS-WORD w!   endif
+   PARAMS?   ILLEGAL-OPS?  ;
+-*-
+>
+RESET
+!000000E6
+( RESET   CHECK-LENGTH )
+HEX
+: RESET   ( -> )  ( RESET ASSEMBLER AFTER EVERY WORD )
+  0  LENGTH-WORD w!      0 STATUS-WORD w!
+  0 SOURCE-VALUE w!   0 DEST-VALUE w!
+  0 SOURCE-REG w!    0 DEST-REG w!    DEPTH  OLD-DEPTH w! ;
+-*-
+>
+LENGTH-DATA
+!0000007F
+CREATE  LENGTH-DATA hex
+  1 w,   2 w,   4 w,   8 w,   10 w,   20 w, 40 w, 80 w,
+100 w, 200 w, 400 w, 800 w, 2000 w, 5000 w,
+-*-
+>
+CHECK-LENGTH
+!000000B2
+hex
+: CHECK-LENGTH   ( -> )
+   0
+  1C 0 DO     I  LENGTH-DATA +  w@
+          LENGTH-WORD w@ AND  0= NOT negate +  2 +LOOP
+  1 = NOT  ABORT" MISMATCHED OPERAND LENGTHS"  ;
+-*-
+>
+SREG
+!000000D8
+( SREG )
+HEX
+: SREG   ( -> )
+  CREATE    C, ( REG# )   w,  ( STATUS )   w,  ( LENGTH )
+  DOES> STATUS-WORD  w@    0DF00 AND  ILLEGAL-OPS?
+    DUP C@  SOURCE-REG w!
+    DUP 3 + w@   SWAP 1+ w@   UPDATE-FLAGS ;
+-*-
+>
+MODIFIER
+!00000067
+( MODIFIER )
+HEX
+: MODIFIER    ( -> )
+  CREATE    w,  ( LENGTH )
+  DOES>   w@  0   UPDATE-FLAGS ;
+-*-
+>
+INCR1
+!00000035
+: INCR1     ( NA NB -> NA+1  NB )
+  SWAP 1+ SWAP ;
+-*-
+>
+INCR2
+!00000035
+: INCR2   ( NA  NB  -> NA+2  NB )
+  SWAP 2+ SWAP ;
+-*-
+>
+TYPE1
+!0000017D
+( TYPE1 )
+( ! xxxxxx D W ! MOD REG R/M ! DISP-LO ! DISP-HI ! )
+HEX
+: TYPE1  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=  IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@  01F1F AND   IF   0
+    ELSE   CHECK-LENGTH
+      DUP C@  ?W  OR  ?D   1 shl  OR    XXC,
+      ?MOD-R/M2  ?REG    3 shl   OR    XXC,
+      ?OFFSET,
+      1   endif   endif
+   INCR1 ;
+-*-
+>
+TYPE2
+!000001A2
+( TYPE2 )
+( ! xxxxxx Q x ! MOD x SR R/M ! DISP-LO ! DISP-HI )
+HEX
+: TYPE2  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@  DUP 1010 AND  NOT
+    SWAP  0F0F  AND   OR     IF  0
+    ELSE   CHECK-LENGTH
+      DUP C@   ?D  1 shl  OR  XXC,
+      DUP 1+ C@  ?MOD-R/M2  ?REG    8 *   OR     OR XXC,
+      ?OFFSET,
+      1   endif   endif
+  INCR2 ;
+-*-
+>
+TYPE3
+!000001FF
+( TYPE3 )
+( ! xxxxxx S W ! MOD xxx R/M ! DISP-LO ! DISP-HI !
+     DATALO ! DATAHI if w=1 ! )    HEX
+: TYPE3  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ( NOTE:  S BIT=1 NOT SUPPORTED; S FORCED TO 0 )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@  DUP  400 AND  NOT
+    SWAP   01F  AND   OR     IF  0
+    ELSE   CHECK-LENGTH
+      DUP C@   ?W  OR   XXC,
+      DUP 1+  C@   ?MOD-R/M2  OR  XXC,
+      ?OFFSET,
+      SOURCE-VALUE w@    DATA,
+      1   endif   endif
+  INCR2 ;
+-*-
+>
+TYPE4
+!00000169
+( TYPE4 )
+( ! xxxxxxx W ! MOD xxx R/M ! DISP-LO ! DISP-HI ! )
+HEX
+: TYPE4  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@  01FFF AND
+    IF  0
+    ELSE   CHECK-LENGTH
+      DUP C@   ?W  OR  XXC,
+      DUP 1+  C@   ?MOD-R/M1  OR  XXC,
+      ?OFFSET,
+      1   endif   endif
+   INCR2 ;
+-*-
+>
+TYPE5
+!000001E8
+( TYPE5 )
+( ! xxxxxx V W ! MOD xxx R/M ! DISP-LO ! DISP-HI ! )
+HEX
+: TYPE5  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@  DUP  A000 AND NOT  SWAP
+    01F AND  OR    IF  0
+    ELSE    LENGTH-WORD w@ 3 = IF  2 LENGTH-WORD w! endif
+      DUP C@   ?V 1 shl OR  ?W OR  XXC,
+      DUP 1+  C@   ?MOD-R/M2-REG OR  XXC,
+      ( OFFSET )  STATUS-LOW 20 AND IF  DEST-VALUE w@ XX, endif
+      1   endif   endif
+  INCR2 ;
+-*-
+>
+TYPE6
+!00000162
+( TYPE6 )
+( ! xxxx W REG ! DATALO ! DATAHI if w=1 ! )
+HEX
+: TYPE6  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@  0480 =  NOT
+    IF  0
+    ELSE   CHECK-LENGTH
+      DUP C@   ?W  8 *  OR   DEST-REG w@   OR  XXC,
+      SOURCE-VALUE  w@   DATA,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE7
+!00000190
+( TYPE7 )
+( ! xxxxxx Q W ! ADDR-LO ! ADDR-HI ! )
+HEX
+: TYPE7  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@  DUP  8020 =  SWAP
+    2080 =  OR   NOT      IF  0
+    ELSE   CHECK-LENGTH
+      DUP C@   ?Q 1 shl  OR   ?W  OR  XXC,
+      ?Q   IF  DEST-VALUE w@  ELSE  SOURCE-VALUE w@  endif XX,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE8
+!0000019F
+( TYPE8 )
+( ! xxxxxxx W ! DATA-LO ! DATA-HI ! )
+HEX
+: TYPE8  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   0480 = NOT
+       DEST-REG w@   OR   SOURCE-REG w@ OR
+    IF  0
+    ELSE   CHECK-LENGTH
+      ( ENSURE DEST IS ACCUM )  ?Q DROP
+      DUP C@   ?W  OR   XXC,
+      SOURCE-VALUE      w@    DATA,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE9
+!0000012B
+( TYPE9 )
+( ! xxxxxxxx ! DATA-LO ! DATA-HI ! )
+HEX
+: TYPE9  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   2000 = NOT
+    IF  0
+    ELSE
+      DUP C@   XXC,
+      SOURCE-VALUE  w@    XX,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE10
+!0000015F
+( TYPE10 )
+( ! xxxxxxxx ! xxxxxxxx ! DISP-LO ! DISP-HI ! )
+HEX
+: TYPE10  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@    2000 =  NOT
+    IF  0
+    ELSE   CHECK-LENGTH
+      DUP C@   XXC,
+      DUP 1+ C@   XXC,
+      SOURCE-VALUE w@   XX,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE11
+!00000192
+( TYPE11 )
+( ! xxxxxxx W ! DATA-8 ! )
+HEX
+: TYPE11  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   DUP  8020 =  OVER  2080 =  OR
+    SWAP 2000 = OR  NOT    IF  0
+    ELSE
+      DUP C@   ?W  OR  XXC,
+      SOURCE-VALUE w@   DEST-VALUE w@  OR
+         DUP  0FF00 AND  ILLEGAL-OPS?      XXC,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE12
+!0000017A
+( TYPE12 )
+( ! xxxxx REG ! )
+HEX
+: TYPE12  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   7F7F AND
+    LENGTH-WORD w@ 2 = NOT   OR
+    IF  0
+    ELSE   CHECK-LENGTH
+      ( ONLY AX ALLOWED FOR DEST )  DEST-REG w@ ILLEGAL-OPS?
+      DUP C@   SOURCE-REG w@  OR  XXC,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE13
+!00000127
+( TYPE13 )
+( ! xxx SR xxx ! )
+HEX
+: TYPE13  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   1000 AND  NOT
+    IF  0
+    ELSE   CHECK-LENGTH
+      DUP C@  SOURCE-REG w@  8 *   OR  XXC,
+      1   endif   endif
+   INCR1 ;
+-*-
+>
+TYPE14
+!00000132
+( TYPE14 )
+( ! xxxxxxxx ! IP-INC-LO ! IP-INC-HI ! )
+HEX
+: TYPE14  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   2000 = NOT
+    IF  0
+    ELSE
+      DUP C@  XXC,
+      SOURCE-VALUE w@   DISP16,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE15
+!00000178
+( TYPE15 )
+( ! xxxxxxxx ! OFFSET-LO ! OFFSET-HI ! SEG-LO ! SEG-HI ! )
+HEX
+: TYPE15 ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   2200 =  NOT
+    LENGTH-WORD w@  4000 = NOT   OR
+    IF  0
+    ELSE
+      DUP C@   XXC,
+      SOURCE-VALUE  w@ XX,   AUX-VALUE w@ XX,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE16
+!00000143
+( TYPE16 )
+( ! xxxxxxxx ! IP-INC-LO ! )
+HEX
+: TYPE16  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@    2000 = NOT  LENGTH-WORD w@ 2000 = NOT OR
+    IF  0
+    ELSE
+      DUP C@  XXC,
+      SOURCE-VALUE w@  DISP8,
+      1   endif   endif
+  INCR1 ;
+-*-
+>
+TYPE18
+!000000E4
+( TYPE18 )
+( ! xxxxxxxx ! )
+HEX
+: TYPE18  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+  STATUS-WORD w@    IF  0   ELSE
+      DUP C@  XXC,
+      1   endif  endif
+  INCR1 ;
+-*-
+>
+TYPE19
+!00000173
+( TYPE19 )
+( ! xxxxx MF x ! MOD xxx R/M ! DISP-LO ! DISP-HI ! )
+HEX
+: TYPE19  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   01FFF AND
+    IF  0
+    ELSE   CHECK-LENGTH
+      DUP C@   ?MF  1 shl  OR  XXC,
+      DUP 1+ C@   ?MOD-R/M1 OR   XXC,
+      ?OFFSET,
+      1   endif   endif
+  INCR2 ;
+-*-
+>
+TYPE21
+!00000152
+( TYPE21 )
+( ! xxxxxxxx ! MOD xxx R/M ! DISP-LO ! DISP-HI ! )
+HEX
+: TYPE21  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   01FFF AND
+    IF  0
+    ELSE
+      DUP C@   XXC,
+      DUP 1+ C@   ?MOD-R/M1 OR   XXC,
+      ?OFFSET,
+      1   endif   endif
+  INCR2 ;
+-*-
+>
+TYPE22
+!00000132
+( TYPE22 )
+( ! xxxxxxxx ! xxxxx ST[i] ! )
+HEX
+: TYPE22  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   0808 AND  NOT
+    IF  0
+    ELSE
+      DUP C@   XXC,
+      DUP 1+ C@   ?FREG     OR   XXC,
+      1   endif   endif
+  INCR2 ;
+-*-
+>
+TYPE23
+!00000108
+( TYPE23 )
+( ! xxxxxxxx ! xxxxxxxx ! )
+HEX
+: TYPE23  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+  STATUS-WORD w@  IF    0   ELSE
+      DUP C@   XXC,
+      DUP 1+ C@   XXC,
+      1   endif  endif
+  INCR2 ;
+-*-
+>
+TYPE24
+!00000142
+( TYPE24 )
+( ! xxxxx D xx ! xxxxx ST[i] ! )
+HEX
+: TYPE24  ( ADDR PREV-SUCCESS-FLAG -> ADDR+2 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+    STATUS-WORD w@   0808 AND  NOT
+    IF  0
+    ELSE
+      DUP C@  ?FD  4 *  OR   XXC,
+      DUP 1+ C@   ?FREG     OR   XXC,
+      1   endif   endif
+  INCR2 ;
+-*-
+>
+TYPE25
+!0000010F
+( TYPE25 )
+( ! xxxxxxx W !  )   ( used by IN/OUT )
+HEX
+: TYPE25  ( ADDR PREV-SUCCESS-FLAG -> ADDR+1 SUCCESS-FLAG )
+  ?DUP  0=   IF   ( NO PREVIOUS SUCCESS )
+  STATUS-WORD w@    8080 = NOT   IF  0 ELSE
+      DUP C@  ?W  OR   XXC,
+      1   endif  endif
+  INCR1 ;
+-*-
+>
+GET-OPS
+!00000051
+( FACTORED WORDS FOR GROUPS )
+: GET-OPS   ( N -> )
+  0 DO      C,   LOOP    ;
+-*-
+>
+OP-FOUND?
+!0000004F
+: OP-FOUND?   ( ADDR  FOUND-FLAG -> )
+  0=   ILLEGAL-OPS?    DROP    RESET ;
+-*-
+>
+GROUP-SETUP
+!0000003D
+: GROUP-SETUP   ( -> 0 )
+  >R  GET-STACK-PARAMS R>    0  ;
+-*-
+>
+GROUPA
+!00000099
+( GROUPA )
+HEX
+: GROUPA  ( OP7 OP6 OP3 OP2 OP1 -> )
+  CREATE   7 GET-OPS
+  DOES>  GROUP-SETUP    TYPE1   TYPE2  TYPE6  TYPE3  TYPE7
+   OP-FOUND? ;
+-*-
+>
+GROUPB
+!0000008A
+( GROUPB )
+HEX
+: GROUPB  ( OP13 OP12 OP4 -> )
+  CREATE   4 GET-OPS
+  DOES>   GROUP-SETUP    TYPE12   TYPE13  TYPE4
+   OP-FOUND? ;
+
+-*-
+>
+GROUPC
+!000000A4
+( GROUPC )
+HEX
+: GROUPC  ( OP12  OP1  -> )
+  CREATE   2 GET-OPS
+  DOES>  GROUP-SETUP    DEST-REG w@ 0= IF  TYPE12
+  ELSE  INCR1  endif    TYPE1   OP-FOUND? ;
+-*-
+>
+GROUPD
+!000000B7
+( GROUPD )
+HEX
+: GROUPD  ( OP12  OP11  -> )
+  CREATE   2 GET-OPS
+  DOES>  GROUP-SETUP    LENGTH-WORD w@  3 =
+    IF  1 LENGTH-WORD w!   endif     TYPE11 TYPE25
+    OP-FOUND? ;
+-*-
+>
+GROUPE
+!00000083
+( GROUPE )
+HEX
+: GROUPE  ( OP18 -> )   ( CONSTANT OPCODES )
+  CREATE   1 GET-OPS
+  DOES>  GROUP-SETUP   TYPE18
+  OP-FOUND? ;
+-*-
+>
+GROUPF
+!000000A7
+( GROUPF )
+HEX
+: GROUPF  ( OP1  -> )
+  CREATE   1 GET-OPS
+  DOES>  GROUP-SETUP   XXHERE >R  1 LENGTH-WORD w!   TYPE1
+  OP-FOUND?    R@  XXC@  0FD AND  R> XXC! ;
+-*-
+>
+GROUPG
+!00000085
+( GROUPG )
+HEX
+: GROUPG  ( OP1  OP3  OP8  -> )
+  CREATE   4 GET-OPS
+  DOES>  GROUP-SETUP   TYPE8   TYPE1   TYPE3
+  OP-FOUND? ;
+-*-
+>
+GROUPH
+!000000C2
+( GROUPH )
+HEX
+: GROUPH    ( OP1 OP3 OP8 -> )
+  CREATE  4  GET-OPS
+  DOES>  XXHERE >R  GROUP-SETUP  TYPE1
+    DUP IF  R@ XXC@ 0FD AND R@ XXC! endif R> DROP
+   TYPE8  TYPE3   OP-FOUND?  ;
+-*-
+>
+GROUPJ
+!00000079
+( GROUPJ )
+HEX
+: GROUPJ  ( OP4  OP12  -> )
+  CREATE   3 GET-OPS
+  DOES>  GROUP-SETUP   TYPE12  TYPE4
+  OP-FOUND? ;
+-*-
+>
+GROUPK
+!0000006B
+( GROUPK )
+HEX
+: GROUPK  ( OP4  -> )
+  CREATE   2 GET-OPS
+  DOES>  GROUP-SETUP   TYPE4
+  OP-FOUND? ;
+-*-
+>
+GROUPL
+!0000006C
+( GROUPL )
+HEX
+: GROUPL  ( OP10 -> )
+  CREATE   2 GET-OPS
+  DOES>  GROUP-SETUP   TYPE23
+  OP-FOUND? ;
+-*-
+>
+GROUPM
+!0000018A
+( GROUPM )
+HEX
+: GROUPM  ( OP4 OP15 OP4 OP16 OP14 -> )
+  CREATE   7 GET-OPS
+  DOES> LENGTH-WORD w@ F000 AND  LENGTH-WORD w!   GROUP-SETUP
+     ( INTER-SEGMENT )  LENGTH-WORD w@ 5000 AND 5000 =
+       IF  4000 LENGTH-WORD w!  TYPE4
+                  ELSE INCR2 endif   TYPE15
+     ( INTRA-SEGMENT )  LENGTH-WORD w@ 1000 AND
+    IF TYPE4 ELSE INCR2 endif   TYPE16 TYPE14
+  OP-FOUND? ;
+-*-
+>
+GROUPN
+!000000BA
+( GROUPN )
+HEX
+: GROUPN  ( OP18 OP8   -> )
+  CREATE   4 GET-OPS
+  DOES>  GROUP-SETUP   LENGTH-WORD w@  4000 =
+     IF  TYPE9  TYPE18 ELSE INCR2 endif  TYPE9  TYPE18
+  OP-FOUND? ;
+-*-
+>
+GROUPP
+!00000073
+( GROUPP )
+HEX
+: GROUPP  ( OP16 -> )
+  CREATE   1 GET-OPS
+  DOES>  SHORT  GROUP-SETUP   TYPE16
+  OP-FOUND? ;
+-*-
+>
+GROUPQ
+!000000DD
+( GROUPQ )
+HEX
+: GROUPQ  ( OP11  OP18  -> )
+  CREATE   2 GET-OPS
+  DOES>  GROUP-SETUP    STATUS-WORD w@ 2000 =
+     SOURCE-VALUE w@ 3 = AND
+     IF  0 STATUS-WORD w!  TYPE18 ELSE INCR1 endif  TYPE11
+  OP-FOUND? ;
+-*-
+>
+GROUPR
+!0000016A
+( GROUPR )
+HEX
+: GROUPR  ( OP22  OP19  OP21 OP21 OP21 -> )
+  CREATE  0A GET-OPS
+  DOES>  9B XXC,  GROUP-SETUP   LENGTH-WORD w@  8 =
+     IF  TYPE21  ELSE    INCR2        endif
+     LENGTH-WORD w@  40 =
+     IF TYPE21  ELSE     INCR2      endif
+     LENGTH-WORD w@  80  =
+     IF TYPE21  ELSE     INCR2      endif
+     TYPE19     TYPE22
+  OP-FOUND? ;
+-*-
+>
+GROUPS
+!00000083
+( GROUPS )
+HEX
+: GROUPS  ( OP19  OP22  -> )
+  CREATE   4 GET-OPS
+  DOES>  9B XXC, GROUP-SETUP   TYPE19  TYPE22
+  OP-FOUND? ;
+-*-
+>
+GROUPT
+!00000076
+( GROUPT )
+HEX
+: GROUPT  ( OP22  -> )
+  CREATE   2 GET-OPS
+  DOES>  9B XXC,  GROUP-SETUP   TYPE22
+  OP-FOUND? ;
+-*-
+>
+GROUPU
+!00000082
+( GROUPU )
+HEX
+: GROUPU  ( OP24 OP19 -> )
+  CREATE   4 GET-OPS
+  DOES>  9B XXC, GROUP-SETUP   TYPE24   TYPE19
+  OP-FOUND? ;
+-*-
+>
+GROUPV
+!00000075
+( GROUPV )
+HEX
+: GROUPV  ( OP24  -> )
+  CREATE   2 GET-OPS
+  DOES>  9B XXC, GROUP-SETUP   TYPE24
+  OP-FOUND? ;
+-*-
+>
+GROUPW
+!00000075
+( GROUPW )
+HEX
+: GROUPW  ( OP23  -> )
+  CREATE   2 GET-OPS
+  DOES>  9B XXC, GROUP-SETUP   TYPE23
+  OP-FOUND? ;
+-*-
+>
+GROUPX
+!00000082
+( GROUPX )
+HEX
+: GROUPX  ( OP21  -> )
+  CREATE   3 GET-OPS
+  DOES>  DUP C@  XXC, 1+   GROUP-SETUP   TYPE21
+     OP-FOUND? ;
+-*-
+>
+GROUPY
+!0000006B
+( GROUPY )
+HEX
+: GROUPY  ( OP5  -> )
+  CREATE   2 GET-OPS
+  DOES>  GROUP-SETUP   TYPE5
+  OP-FOUND? ;
+-*-
+>
+ZAREA
+!00000024
+( GROUPZA )
+CREATE ZAREA  4 ALLOT
+-*-
+>
+GROUPZA
+!000000DE
+hex
+: GROUPZA  ( OP24 OP19 -> )
+  CREATE   4 GET-OPS
+  DOES>  9B XXC, GROUP-SETUP   DROP
+  DUP w@                   ZAREA w!
+   2+ w@  ?FD  800 * XOR   ZAREA 2+ w!
+        ZAREA  0    TYPE19   TYPE24
+  OP-FOUND? ;
+-*-
+>
+GROUPZB
+!00000077
+( GROUPZB )
+HEX
+: GROUPZB  ( OP24  -> )
+  CREATE   2 GET-OPS
+  DOES>  9B XXC, GROUP-SETUP   TYPE24
+  OP-FOUND? ;
+-*-
+>
+GROUPZC
+!00000077
+( GROUPZC )
+HEX
+: GROUPZC  ( OP23  -> )
+  CREATE   2 GET-OPS
+  DOES>  90 XXC, GROUP-SETUP   TYPE23
+  OP-FOUND? ;
+-*-
+>
+HERE-BE-STUFF
+!00000017
+package here-be-stuff
+-*-
+v
+AL
+!00000039
+( SOURCE REGISTER DEFINITIONS )
+HEX 1 8000 0  SREG  AL
+-*-
+>
+AH
+!00000017
+hex 1 8000 4 SREG  AH
+-*-
+>
+CL
+!00000018
+hex 1 8000 1  SREG  CL
+-*-
+>
+CH
+!00000017
+hex 1 8000 5 SREG  CH
+-*-
+>
+DL
+!00000018
+hex 1 8000 2  SREG  DL
+-*-
+>
+DH
+!00000017
+hex 1 8000 6 SREG  DH
+-*-
+>
+BL
+!00000018
+hex 1 8000 3  SREG  BL
+-*-
+>
+BH
+!00000017
+hex 1 8000 7 SREG  BH
+-*-
+>
+AX
+!00000018
+hex 2 8000 0  SREG  AX
+-*-
+>
+SP
+!00000017
+hex 2 8000 4 SREG  SP
+-*-
+>
+CX
+!00000018
+hex 2 8000 1  SREG  CX
+-*-
+>
+BP
+!00000017
+hex 2 8000 5 SREG  BP
+-*-
+>
+DX
+!00000018
+hex 2 8000 2  SREG  DX
+-*-
+>
+SI
+!00000017
+hex 2 8000 6 SREG  SI
+-*-
+>
+BX
+!00000018
+hex 2 8000 3  SREG  BX
+-*-
+>
+DI
+!00000017
+hex 2 8000 7 SREG  DI
+-*-
+>
+ES
+!00000018
+hex 2 1000 0  SREG  ES
+-*-
+>
+SS
+!00000017
+hex 2 1000 2 SREG  SS
+-*-
+>
+CS
+!00000018
+hex 2 1000 1  SREG  CS
+-*-
+>
+DS
+!00000017
+hex 2 1000 3 SREG  DS
+-*-
+>
+[BX+SI]
+!00000042
+( SOURCE REGISTER DEFINITIONS - 2 )
+HEX 0 4000 0  SREG  [BX+SI]
+-*-
+>
+[SI]
+!00000019
+hex 0 4000 4 SREG  [SI]
+-*-
+>
+[BX+DI]
+!0000001D
+hex 0 4000 1  SREG  [BX+DI]
+-*-
+>
+[DI]
+!00000019
+hex 0 4000 5 SREG  [DI]
+-*-
+>
+[BP+SI]
+!0000001D
+hex 0 4000 2  SREG  [BP+SI]
+-*-
+>
+<BP>
+!00000019
+hex 0 4000 6 SREG  <BP>
+-*-
+>
+[BP+DI]
+!0000001D
+hex 0 4000 3  SREG  [BP+DI]
+-*-
+>
+[BX]
+!00000019
+hex 0 4000 7 SREG  [BX]
+-*-
+>
+ST[0]
+!0000001B
+hex 0  800 0  SREG  ST[0]
+-*-
+>
+ST[4]
+!0000001B
+hex  0  800 4 SREG  ST[4]
+-*-
+>
+ST[1]
+!0000001B
+hex 0  800 1  SREG  ST[1]
+-*-
+>
+ST[5]
+!0000001A
+hex 0  800 5 SREG  ST[5]
+-*-
+>
+ST[2]
+!0000001B
+hex 0  800 2  SREG  ST[2]
+-*-
+>
+ST[6]
+!0000001D
+hex 0  800 6    SREG  ST[6]
+-*-
+>
+ST[3]
+!0000001B
+hex 0  800 3  SREG  ST[3]
+-*-
+>
+ST[7]
+!0000001D
+hex 0  800 7    SREG  ST[7]
+-*-
+>
+ST
+!00000018
+hex 0  800 0  SREG  ST
+-*-
+>
+[BP]
+!0000006A
+: [BP]  ( N or ---  ->  N or 0 )  ( [BP] with no offset illegal)
+   <BP>  PARAMS?  0=   IF  0  endif  ;
+-*-
+>
+DS:
+!00000032
+( SEGMENT PREFIXES  )
+HEX
+: DS:     3E XXC,  ;
+-*-
+>
+CS:
+!0000001B
+hex
+: CS:     2E XXC,  ;
+-*-
+>
+ES:
+!0000001B
+hex
+: ES:     26 XXC,  ;
+-*-
+>
+SS:
+!0000001B
+hex
+: SS:     36 XXC,  ;
+-*-
+>
+BYTE
+!00000018
+hex  1   MODIFIER BYTE
+-*-
+>
+WORD
+!00000018
+hex  2   MODIFIER WORD
+-*-
+>
+SHORT_INT
+!0000001D
+hex  4   MODIFIER SHORT_INT
+-*-
+>
+LONG_INT
+!0000001C
+hex  8   MODIFIER LONG_INT
+-*-
+>
+SHORT_REAL
+!0000001E
+hex 10   MODIFIER SHORT_REAL
+-*-
+>
+LONG_REAL
+!0000001D
+hex 20   MODIFIER LONG_REAL
+-*-
+>
+TEMP_REAL
+!0000001D
+hex 40   MODIFIER TEMP_REAL
+-*-
+>
+BCD
+!00000017
+hex 80   MODIFIER BCD
+-*-
+>
+INDIRECT
+!0000001D
+hex 1000  MODIFIER INDIRECT
+-*-
+>
+SHORT
+!0000001A
+hex 2000  MODIFIER SHORT
+-*-
+>
+FAR
+!00000018
+hex 4000  MODIFIER FAR
+-*-
+>
+MOV
+!0000002B
+hex A0  00 C6  B0  00 8C  88   GROUPA MOV
+-*-
+>
+PUSH
+!00000023
+hex 30 FF  06  50     GROUPB PUSH
+-*-
+>
+POP
+!00000022
+hex 00 8F  07  58     GROUPB POP
+-*-
+>
+XCHG
+!0000001A
+hex 86  90   GROUPC XCHG
+-*-
+>
+IN
+!00000018
+hex EC  E4   GROUPD IN
+-*-
+>
+OUT
+!00000019
+hex EE  E6   GROUPD OUT
+-*-
+>
+PUSHF
+!00000016
+hex 9C  GROUPE PUSHF
+-*-
+>
+POPF
+!00000014
+hex 9d GROUPE POPF
+-*-
+>
+AAA
+!00000013
+hex 37 GROUPE AAA
+-*-
+>
+DAA
+!00000015
+hex  27  GROUPE DAA
+-*-
+>
+AAS
+!00000013
+hex 3f GROUPE AAS
+-*-
+>
+DAS
+!00000013
+hex 2f GROUPE DAS
+-*-
+>
+CBW
+!00000015
+hex  98  GROUPE CBW
+-*-
+>
+CWD
+!00000013
+hex 99 GROUPE CWD
+-*-
+>
+REPZ
+!00000014
+hex f3 GROUPE REPZ
+-*-
+>
+REPNZ
+!00000017
+hex  F2  GROUPE REPNZ
+-*-
+>
+MOVSB
+!00000015
+hex a4 GROUPE MOVSB
+-*-
+>
+MOVSW
+!00000015
+hex a5 GROUPE MOVSW
+-*-
+>
+CMPSB
+!00000017
+hex  A6  GROUPE CMPSB
+-*-
+>
+CMPSW
+!00000015
+hex a7 GROUPE CMPSW
+-*-
+>
+SCASB
+!00000015
+hex ae GROUPE SCASB
+-*-
+>
+SCASW
+!00000017
+hex  AF  GROUPE SCASW
+-*-
+>
+LODSB
+!00000015
+hex ac GROUPE LODSB
+-*-
+>
+LODSW
+!00000015
+hex ad GROUPE LODSW
+-*-
+>
+STOSB
+!00000017
+hex  AA  GROUPE STOSB
+-*-
+>
+STOSW
+!00000015
+hex ab GROUPE STOSW
+-*-
+>
+INTO
+!00000014
+hex ce GROUPE INTO
+-*-
+>
+XLAT
+!00000025
+( GROUPE - 2 )
+HEX D7  GROUPE XLAT
+-*-
+>
+LAHF
+!00000014
+hex 9f GROUPE LAHF
+-*-
+>
+SAHF
+!00000014
+hex 9e GROUPE SAHF
+-*-
+>
+IRET
+!00000016
+hex  CF  GROUPE IRET
+-*-
+>
+CLC
+!00000013
+hex f8 GROUPE CLC
+-*-
+>
+CMC
+!00000013
+hex f5 GROUPE CMC
+-*-
+>
+STC
+!00000015
+hex  F9  GROUPE STC
+-*-
+>
+CLD
+!00000013
+hex fc GROUPE CLD
+-*-
+>
+STD
+!00000013
+hex fd GROUPE STD
+-*-
+>
+CLI
+!00000015
+hex  FA  GROUPE CLI
+-*-
+>
+STI
+!00000013
+hex fb GROUPE STI
+-*-
+>
+HLT
+!00000013
+hex f4 GROUPE HLT
+-*-
+>
+WAIT
+!00000016
+hex  9B  GROUPE WAIT
+-*-
+>
+FWAIT
+!00000015
+hex 9b GROUPE FWAIT
+-*-
+>
+LOCK
+!00000014
+hex f0 GROUPE LOCK
+-*-
+>
+REPE
+!00000016
+hex  F3  GROUPE REPE
+-*-
+>
+REP
+!00000013
+hex f3 GROUPE REP
+-*-
+>
+REPNE
+!00000015
+hex f2 GROUPE REPNE
+-*-
+>
+NOP
+!00000015
+hex  90  GROUPE NOP
+-*-
+>
+LEA
+!00000015
+hex 8D   GROUPF LEA
+-*-
+>
+LDS
+!00000016
+hex  C5   GROUPF LDS
+-*-
+>
+LES
+!00000016
+hex  C4   GROUPF LES
+-*-
+>
+ADD
+!00000020
+hex 00 80  00  04   GROUPG ADD
+-*-
+>
+ADC
+!00000021
+hex  10 80  10  15   GROUPG ADC
+-*-
+>
+SUB
+!00000021
+hex  28 80  28  2C   GROUPG SUB
+-*-
+>
+SBB
+!00000021
+hex  18 80  18  1C   GROUPG SBB
+-*-
+>
+CMP
+!00000021
+hex  38 80  38  3C   GROUPG CMP
+-*-
+>
+AND
+!00000021
+hex  20 80  20  24   GROUPG AND
+-*-
+>
+OR
+!00000020
+hex  08 80  08  0C   GROUPG OR
+-*-
+>
+XOR
+!00000021
+hex  30 80  30  34   GROUPG XOR
+-*-
+>
+TEST
+!00000021
+hex 00 F6  A8  84   GROUPH TEST
+-*-
+>
+INC
+!0000001C
+hex 00 FE  40   GROUPJ INC
+-*-
+>
+DEC
+!0000001D
+hex  08 FE  48   GROUPJ DEC
+-*-
+>
+NEG
+!00000018
+hex 18 F6   GROUPK NEG
+-*-
+>
+MUL
+!00000019
+hex  20 F6   GROUPK MUL
+-*-
+>
+IMUL
+!0000001A
+hex  28 F6   GROUPK IMUL
+-*-
+>
+DIV
+!00000019
+hex  30 F6   GROUPK DIV
+-*-
+>
+IDIV
+!0000001A
+hex  38 F6   GROUPK IDIV
+-*-
+>
+NOT
+!00000019
+hex  10 F6   GROUPK NOT
+-*-
+>
+AAM
+!00000018
+hex 0A D4   GROUPL AAM
+-*-
+>
+AAD
+!00000019
+hex  0A D5   GROUPL AAD
+-*-
+>
+CALL
+!0000002C
+hex E8  F4  10 FF  9A  18 FF   GROUPM CALL
+-*-
+>
+JMP
+!0000002C
+hex  E9  EB  20 FF  EA  28 FF   GROUPM JMP
+-*-
+>
+RET
+!00000021
+hex C3  C2  CB  CA   GROUPN RET
+-*-
+>
+JE
+!00000013
+hex 74  GROUPP JE
+-*-
+>
+JZ
+!00000012
+hex 74 GROUPP JZ
+-*-
+>
+JL
+!00000012
+hex 7c GROUPP JL
+-*-
+>
+JNGE
+!00000016
+hex  7C  GROUPP JNGE
+-*-
+>
+JLE
+!00000013
+hex 7e GROUPP JLE
+-*-
+>
+JNG
+!00000013
+hex 7e GROUPP JNG
+-*-
+>
+JB
+!00000014
+hex  72  GROUPP JB
+-*-
+>
+JNAE
+!00000014
+hex 72 GROUPP JNAE
+-*-
+>
+JBE
+!00000013
+hex 76 GROUPP JBE
+-*-
+>
+JNA
+!00000015
+hex  76  GROUPP JNA
+-*-
+>
+JP
+!00000012
+hex 7A GROUPP JP
+-*-
+>
+JPE
+!00000013
+hex 7a GROUPP JPE
+-*-
+>
+JO
+!00000014
+hex  70  GROUPP JO
+-*-
+>
+JS
+!0000000E
+78 GROUPP JS
+-*-
+>
+JNE
+!00000013
+hex 75 GROUPP JNE
+-*-
+>
+JNZ
+!00000015
+hex  75  GROUPP JNZ
+-*-
+>
+JNL
+!00000013
+hex 7d GROUPP JNL
+-*-
+>
+JGE
+!00000013
+hex 7d GROUPP JGE
+-*-
+>
+JNLE
+!00000025
+( GROUPP - 2 )
+HEX 7F  GROUPP JNLE
+-*-
+>
+JG
+!00000012
+hex 7f GROUPP JG
+-*-
+>
+JNB
+!00000013
+hex 73 GROUPP JNB
+-*-
+>
+JAE
+!00000015
+hex  73  GROUPP JAE
+-*-
+>
+JNBE
+!00000014
+hex 77 GROUPP JNBE
+-*-
+>
+JA
+!00000012
+hex 77 GROUPP JA
+-*-
+>
+JNP
+!00000015
+hex  7B  GROUPP JNP
+-*-
+>
+JPO
+!00000013
+hex 7b GROUPP JPO
+-*-
+>
+JNO
+!00000013
+hex 71 GROUPP JNO
+-*-
+>
+JNS
+!00000015
+hex  79  GROUPP JNS
+-*-
+>
+LOOPZ
+!00000015
+hex e1 GROUPP LOOPZ
+-*-
+>
+LOOPE
+!00000017
+hex  E1  GROUPP LOOPE
+-*-
+>
+LOOPNZ
+!00000016
+hex e0 GROUPP LOOPNZ
+-*-
+>
+LOOPNE
+!00000016
+hex e0 GROUPP LOOPNE
+-*-
+>
+JNC
+!00000015
+hex  73  GROUPP JNC
+-*-
+>
+JC
+!00000012
+hex 72 GROUPP JC
+-*-
+>
+JCXZ
+!00000016
+hex  E3  GROUPP JCXZ
+-*-
+>
+LOOP
+!00000016
+hex  E2  GROUPP LOOP
+-*-
+>
+INT
+!00000019
+hex CD  CC   GROUPQ INT
+-*-
+>
+FLD
+!00000034
+hex C0 D9  00 D9  20 DF  28 DB  28 DF   GROUPR FLD
+-*-
+>
+FSTP
+!00000036
+hex  D8 DD  18 D9  30 DF  38 DB  38 DF   GROUPR FSTP
+-*-
+>
+FST
+!0000001F
+hex D0 DD  10 D9   GROUPS FST
+-*-
+>
+FCOM
+!00000021
+hex  D0 D8  10 D8   GROUPS FCOM
+-*-
+>
+FCOMP
+!00000022
+hex  D8 D8  18 D8   GROUPS FCOMP
+-*-
+>
+FXCH
+!00000019
+hex C8 D9   GROUPT FXCH
+-*-
+>
+FFREE
+!0000001B
+hex  C0 DD   GROUPT FFREE
+-*-
+>
+FADD
+!00000020
+hex 00 D8  C0 D8   GROUPU FADD
+-*-
+>
+FMUL
+!00000021
+hex  08 D8  C8 D8   GROUPU FMUL
+-*-
+>
+FADDP
+!0000001A
+hex C0 DA   GROUPV FADDP
+-*-
+>
+FMULP
+!0000001B
+hex  C8 DA   GROUPV FMULP
+-*-
+>
+FCOMPP
+!0000001B
+hex D9 DE   GROUPW FCOMPP
+-*-
+>
+FTST
+!00000017
+hex e4 d9 GROUPW FTST
+-*-
+>
+FXAM
+!0000001A
+hex  E5 D9   GROUPW FXAM
+-*-
+>
+FSQRT
+!00000018
+hex fa d9 GROUPW FSQRT
+-*-
+>
+FSCALE
+!0000001C
+hex  FD D9   GROUPW FSCALE
+-*-
+>
+FPREM
+!00000018
+hex f8 d9 GROUPW FPREM
+-*-
+>
+FRNDINT
+!0000001D
+hex  FC D9   GROUPW FRNDINT
+-*-
+>
+FXTRACT
+!0000001A
+hex f4 d9 GROUPW FXTRACT
+-*-
+>
+FABS
+!0000001A
+hex  E1 D9   GROUPW FABS
+-*-
+>
+FCHS
+!00000017
+hex e0 d9 GROUPW FCHS
+-*-
+>
+FPTAN
+!0000001B
+hex  F2 D9   GROUPW FPTAN
+-*-
+>
+FPATAN
+!00000019
+hex f3 d9 GROUPW FPATAN
+-*-
+>
+F2XM1
+!0000002A
+( GROUPW - 2 )
+HEX F0 D9   GROUPW F2XM1
+-*-
+>
+FINCSTP
+!0000001A
+hex f7 d9 GROUPW FINCSTP
+-*-
+>
+FYL2X
+!0000001B
+hex  F1 D9   GROUPW FYL2X
+-*-
+>
+FYL2XP1
+!0000001A
+hex f9 d9 GROUPW FYL2XP1
+-*-
+>
+FLDZ
+!0000001A
+hex  EE D9   GROUPW FLDZ
+-*-
+>
+FLD1
+!00000017
+hex e8 d9 GROUPW FLD1
+-*-
+>
+FLDPI
+!0000001B
+hex  EB D9   GROUPW FLDPI
+-*-
+>
+FLDL2T
+!00000019
+hex e9 d9 GROUPW FLDL2T
+-*-
+>
+FLDL2E
+!0000001C
+hex  EA D9   GROUPW FLDL2E
+-*-
+>
+FLDLG2
+!00000019
+hex ec d9 GROUPW FLDLG2
+-*-
+>
+FLDLN2
+!0000001C
+hex  ED D9   GROUPW FLDLN2
+-*-
+>
+FINIT
+!00000018
+hex e3 db GROUPW FINIT
+-*-
+>
+FENI
+!0000001A
+hex  E0 DB   GROUPW FENI
+-*-
+>
+FDISI
+!00000018
+hex e1 db GROUPW FDISI
+-*-
+>
+FCLEX
+!0000001B
+hex  E2 DB   GROUPW FCLEX
+-*-
+>
+FDECSTP
+!0000001A
+hex f6 d9 GROUPW FDECSTP
+-*-
+>
+FNOP
+!0000001A
+hex  D0 D9   GROUPW FNOP
+-*-
+>
+FLDCW
+!0000001E
+hex 28 D9 9B    GROUPX FLDCW
+-*-
+>
+FSTCW
+!0000001F
+hex  38 D9 9B    GROUPX FSTCW
+-*-
+>
+FNSTCW
+!0000001C
+hex 38 d9 90 GROUPX FNSTCW
+-*-
+>
+FSTSW
+!0000001F
+hex  38 DD 9B    GROUPX FSTSW
+-*-
+>
+FNSTSW
+!0000001C
+hex 38 dd 90 GROUPX FNSTSW
+-*-
+>
+FSTENV
+!00000021
+hex   30 D9 9B    GROUPX FSTENV
+-*-
+>
+FNSTENV
+!0000001D
+hex 30 d9 90 GROUPX FNSTENV
+-*-
+>
+FLDENV
+!00000020
+hex  20 D9 9B    GROUPX FLDENV
+-*-
+>
+FSAVE
+!0000001F
+hex  30 DD 9B    GROUPX FSAVE
+-*-
+>
+FNSAVE
+!0000001C
+hex 30 dd 90 GROUPX FNSAVE
+-*-
+>
+FRSTOR
+!00000020
+hex  20 DD 9B    GROUPX FRSTOR
+-*-
+>
+SHL
+!00000018
+hex 20 D0   GROUPY SHL
+-*-
+>
+SAL
+!0000000F
+: SAL SHL ;
+
+-*-
+>
+SHR
+!00000019
+hex  28 D0   GROUPY SHR
+-*-
+>
+SAR
+!00000019
+hex  38 D0   GROUPY SAR
+-*-
+>
+ROL
+!00000019
+hex  00 D0   GROUPY ROL
+-*-
+>
+ROR
+!00000019
+hex  08 D0   GROUPY ROR
+-*-
+>
+RCL
+!00000019
+hex  10 D0   GROUPY RCL
+-*-
+>
+RCR
+!00000019
+hex  18 D0   GROUPY RCR
+-*-
+>
+FSUB
+!00000021
+hex E0 D8  20 D8   GROUPZA FSUB
+-*-
+>
+FSUBR
+!00000023
+hex  E8 D8  28 D8   GROUPZA FSUBR
+-*-
+>
+FDIV
+!00000022
+hex  F0 D8  30 D8   GROUPZA FDIV
+-*-
+>
+FDIVR
+!00000023
+hex  F8 D8  38 D8   GROUPZA FDIVR
+-*-
+>
+FSUBP
+!0000001B
+hex E8 DA   GROUPZB FSUBP
+-*-
+>
+FSUBRP
+!0000001D
+hex  E0 DA   GROUPZB FSUBRP
+-*-
+>
+FDIVP
+!0000001C
+hex  F8 DA   GROUPZB FDIVP
+-*-
+>
+FDIVRP
+!0000001D
+hex  F0 DA   GROUPZB FDIVRP
+-*-
+>
+FNCLEX
+!0000001C
+hex E2 DB   GROUPZC FNCLEX
+-*-
+>
+FNDISI
+!0000001D
+hex  E1 DB   GROUPZC FNDISI
+-*-
+>
+FNENI
+!0000001C
+hex  E0 DB   GROUPZC FNENI
+-*-
+>
+FNINIT
+!0000001D
+hex  E3 DB   GROUPZC FNINIT
+-*-
+>
+MATCH-LENGTH
+!0000006E
+( INTEGER AND BCD F-WORDS )
+HEX
+: MATCH-LENGTH   ( MASK -> )
+  LENGTH-WORD w@ AND   NOT   ILLEGAL-OPS?  ;
+-*-
+>
+FBLD
+!0000001A
+: FBLD       BCD  FLD  ;
+-*-
+>
+FBSTP
+!0000001D
+: FBSTP      BCD  FSTP  ;
+
+-*-
+>
+FIADD
+!00000029
+: FIADD      06 MATCH-LENGTH  FADD  ;
+
+-*-
+>
+FICOM
+!00000029
+: FICOM      06 MATCH-LENGTH  FCOM  ;
+
+-*-
+>
+FICOMP
+!0000002A
+: FICOMP     06 MATCH-LENGTH  FCOMP  ;
+
+-*-
+>
+FIDIV
+!00000029
+: FIDIV      06 MATCH-LENGTH  FDIV  ;
+
+-*-
+>
+FIDIVR
+!0000002A
+: FIDIVR     06 MATCH-LENGTH  FDIVR  ;
+
+-*-
+>
+FILD
+!00000028
+: FILD       0E MATCH-LENGTH  FLD  ;
+
+-*-
+>
+FIMUL
+!00000029
+: FIMUL      06 MATCH-LENGTH  FMUL  ;
+
+-*-
+>
+FIST
+!00000028
+: FIST       06 MATCH-LENGTH  FST  ;
+
+-*-
+>
+FISTP
+!00000029
+: FISTP      0E MATCH-LENGTH  FSTP  ;
+
+-*-
+>
+FISUB
+!00000029
+: FISUB      06 MATCH-LENGTH  FSUB  ;
+
+-*-
+>
+FISUBR
+!00000028
+: FISUBR     06 MATCH-LENGTH  FSUBR  ;
+-*-
+>
+OVERFLOW?
+!0000003D
+( BRANCH CONDITION DEFINITIONS )
+HEX 71 CONSTANT OVERFLOW?
+-*-
+>
+NO-OVERFLOW?
+!0000001E
+hex 70 CONSTANT NO-OVERFLOW?
+-*-
+>
+BELOW?
+!00000018
+hex 73 CONSTANT BELOW?
+-*-
+>
+NOT-BELOW?
+!0000001C
+hex 72 CONSTANT NOT-BELOW?
+-*-
+>
+=0?
+!00000015
+hex 75 CONSTANT =0?
+-*-
+>
+<>0?
+!00000016
+hex 74 CONSTANT <>0?
+-*-
+>
+=?
+!00000014
+hex 75 CONSTANT =?
+-*-
+>
+<>?
+!00000015
+hex 74 CONSTANT <>?
+-*-
+>
+BELOW/=?
+!0000001A
+hex 77 CONSTANT BELOW/=?
+-*-
+>
+NOT-BELOW/=?
+!0000001E
+hex 76 CONSTANT NOT-BELOW/=?
+-*-
+>
+SIGN?
+!00000017
+hex 79 CONSTANT SIGN?
+-*-
+>
+NO-SIGN?
+!0000001A
+hex 78 CONSTANT NO-SIGN?
+-*-
+>
+PARITY?
+!00000019
+hex 7B CONSTANT PARITY?
+-*-
+>
+NO-PARITY?
+!0000001C
+hex 7a CONSTANT NO-PARITY?
+-*-
+>
+<?
+!00000014
+hex 7D CONSTANT <?
+-*-
+>
+>=?
+!00000015
+hex 7c CONSTANT >=?
+-*-
+>
+<=?
+!00000015
+hex 7F CONSTANT <=?
+-*-
+>
+>?
+!00000014
+hex 7e CONSTANT >?
+-*-
+>
+CARRY?
+!00000018
+hex 73 CONSTANT CARRY?
+-*-
+>
+NO-CARRY?
+!0000001B
+hex 72 CONSTANT NO-CARRY?
+-*-
+>
+?LOOPZ
+!00000018
+hex E1 CONSTANT ?LOOPZ
+-*-
+>
+?LOOPNZ
+!00000019
+hex e0 CONSTANT ?LOOPNZ
+-*-
+>
+?LOOP
+!00000017
+hex E2 CONSTANT ?LOOP
+-*-
+>
+CX<>0?
+!00000018
+hex e3 CONSTANT CX<>0?
+-*-
+>
+DISP8!
+!000000BA
+( CONDITIONAL BRANCH CONTROL STRUCTURES )
+HEX
+: DISP8!   ( !ADDR BRANCH-ADDR -> )
+  OVER 1+ -   DUP  FF00 AND  DUP  FF00 = SWAP 0= OR NOT
+   ABORT" JUMP OUT OF RANGE"   SWAP XXC! ;
+-*-
+>
+IF
+!00000069
+: IF   ( OP-CODE  -> ADDR )
+   PARAMS?  1 = NOT   ILLEGAL-OPS?
+   XXC,   XXHERE   0 XXC,     RESET  ;
+-*-
+>
+WHILE
+!00000028
+: WHILE   ( OPCODE -> ADDR )     IF  ;
+-*-
+>
+UNTIL
+!0000007E
+: UNTIL    ( ADDR OPCODE -> )
+   PARAMS?  1 = NOT  ILLEGAL-OPS?
+   XXC,  XXHERE  1 XXALLOT  SWAP  DISP8!   ?STACK  RESET ;
+-*-
+>
+BEGIN
+!0000004D
+( IF -- CONDITIONALS )
+HEX
+: BEGIN    ( -> ADDR )
+    XXHERE    RESET  ;
+-*-
+>
+REPEAT
+!0000007B
+hex
+: REPEAT  ( BEGIN-ADDR  WHILE-ADDR -> )
+   XXHERE 2+  DISP8!  0EB XXC,
+   XXHERE 1 XXALLOT SWAP DISP8!  RESET    ;
+-*-
+>
+ELSE
+!00000065
+hex
+: ELSE   ( IF-ADDR -> ELSE-ADDR )
+   0EB XXC,  XXHERE  0 XXC,  SWAP  XXHERE  DISP8!   RESET ;
+-*-
+>
+THEN
+!0000003E
+hex
+: THEN   ( ELSE-ADDR -> )
+   XXHERE  DISP8!    RESET ;
+-*-
+>
+,
+!0000013B
+( ,   -- SOURCE/DEST DELIMITER )
+: ,     ( -> )   ( DESTINATION DELIMITER )
+  STATUS-LOW  ABORT" MULTIPLE DESTINATIONS"
+  GET-STACK-PARAMS
+  STATUS-WORD w@  BYTESWAP   STATUS-WORD w!
+  SOURCE-REG w@  DEST-REG w!   0 SOURCE-REG w!
+  SOURCE-VALUE w@  DEST-VALUE w!   0 SOURCE-VALUE w!
+  DEPTH  OLD-DEPTH w! ;
+-*-
+>
+]ENDASM
+!00000099
+\ End using the assembler
+: ]endasm
+  [compile] x   \ Use empty package (turn off searching the assembler)
+  [compile] ]   \ Turn the compiler on
+;
+-*-
+v
+X
+!0000000B
+package x
+-*-
+^
+^
+^

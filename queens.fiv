@@ -1,0 +1,144 @@
+QUEENS
+!000001AD
+\ DRIVING PROGRAM       QUEENS
+
+: QUEENS   ( N -> )
+  cls
+  depth 1 <
+  abort"
+
+  To run this demo type 'N queens' where N is the number of queens
+  you wish to use. If you uncomment a line in place-queens you will
+  see the search for the solution."
+
+   INITIALIZE-ARRAYS
+   DUP #QUEENS !
+   1- PLACE-QUEEN
+   IF  .BOARD   ." SUCCESS"
+   ELSE  cls  ." NO SOLUTION FOR " #queens @ . ." QUEENS" clreol
+   endif ;
+-*-
+v
+MAX-QUEENS
+!00000053
+\ QUEENS PROBLEM DATA STRUCTURES
+\ ALLOW UP TO 50 QUEENS
+50 CONSTANT MAX-QUEENS
+-*-
+>
+#QUEENS
+!0000003D
+VARIABLE #QUEENS   \ Number of queens in use on current run
+-*-
+>
+COL
+!0000007F
+\ NOTE: The row number implicitly =s the queen sequence number
+CREATE COL   MAX-QUEENS    ALLOT  \ Flag whether col occupied
+-*-
+>
+DIAG1
+!00000046
+CREATE DIAG1 MAX-QUEENS 1 shl ALLOT  \ Flag whether diag1 occupied
+
+-*-
+>
+DIAG2
+!00000046
+CREATE DIAG2 MAX-QUEENS 1 shl ALLOT  \ Flag whether diag2 occupied
+
+-*-
+>
+XBOARD
+!00000028
+CREATE XBOARD   MAX-QUEENS DUP * ALLOT
+-*-
+>
+INITIALIZE-ARRAYS
+!000000BC
+\ INITIALIZE DATA STRUCTURES
+: INITIALIZE-ARRAYS  ( -> )
+   COL    MAX-QUEENS 0  FILL
+   DIAG1  MAX-QUEENS 0  FILL
+   DIAG2  MAX-QUEENS 0  FILL
+   XBOARD  MAX-QUEENS DUP *  0 FILL ;
+-*-
+>
+.BOARD
+!00000183
+\ DISPLAY CURRENT BOARD RESULTS
+: .BOARD  ( -> )
+   ?STACK abort" Stack underflow"
+   0 0 gotoxy ." Solution for " #queens @ dup . 1 =
+   if    ." queen!"
+   else  ." queens!" endif
+   clreol cr
+   #QUEENS @ 0 DO   ( Row loop )    CR
+      #QUEENS @ 0 DO   ( Column loop )
+         J  #QUEENS @ *  I +  XBOARD + C@
+         IF  ." * " ELSE ." . " endif
+      LOOP
+   LOOP ;
+-*-
+>
+DIAG1-ADDR
+!0000009A
+\ COMPUTE DIAGONAL POSITIONS & DETERMINE IF SPACE IS FREE
+: DIAG1-ADDR  ( ROW COL -> DIAG1.ADDR )   (  "\" Slanted )
+   SWAP -  #QUEENS @ +  DIAG1 + ;
+-*-
+>
+DIAG2-ADDR
+!00000051
+: DIAG2-ADDR  ( ROW COL -> DIAG2.ADDR )   (  "/" Slanted )
+   + 1+   DIAG2 + ;
+-*-
+>
+SPACE-FREE?
+!00000093
+: SPACE-FREE?  ( ROW COL -> FREE-FLAG )
+   DUP  COL + C@  0=  >R
+   stack ab|abab  DIAG1-ADDR  C@  0= >R
+   DIAG2-ADDR C@ 0=  R> AND  R> AND ;
+-*-
+>
+PLACE-PIECE
+!000000D1
+\ PLACE & REMOVE PIECE FROM BOARD
+: PLACE-PIECE   ( ROW COL -> )
+   1 OVER  COL + C!
+   OVER  #QUEENS @ *  OVER +  XBOARD +  1 SWAP C!
+   stack ab|abab  DIAG1-ADDR  1 SWAP C!      DIAG2-ADDR  1 SWAP C! ;
+-*-
+>
+REMOVE-PIECE
+!000000AF
+: REMOVE-PIECE   ( ROW COL -> )
+   0 OVER  COL + C!
+   OVER  #QUEENS @ *  OVER +  XBOARD +  0 SWAP C!
+   stack ab|abab  DIAG1-ADDR  0 SWAP C!      DIAG2-ADDR  0 SWAP C! ;
+-*-
+>
+PLACE-QUEEN
+!00000249
+\ PLACE-QUEEN RECURSIVE PROCEDURE
+: PLACE-QUEEN  ( #QUEENS.LEFT -> SUCCESS-FLAG )
+   DUP 0< NOT   IF  ( non-zero queen # )
+      0 SWAP   #QUEENS @   0
+      DO  ( Sequence thru cols )
+        DUP I  SPACE-FREE?
+        IF   DUP I PLACE-PIECE
+\      .BOARD ( <- uncomment this line to see the solutions as they are found!)
+              DUP 1-  place-queen
+              IF ( success ) SWAP DROP 1 SWAP LEAVE
+              ELSE ( failure )   DUP I REMOVE-PIECE  endif
+        endif
+      LOOP    DROP ( drop #queens leaving flag )
+   ELSE  ( last queen ) DROP 1  endif ;
+-*-
+>
+DEMO
+!0000002D
+: demo 1 10 do i queens key drop -1 +loop ;
+-*-
+^

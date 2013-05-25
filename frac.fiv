@@ -1,0 +1,147 @@
+FRAC
+!0000000D
+: frac go ;
+-*-
+v
+XMAX
+!00000027
+( Maximum X value)
+320 constant xmax
+-*-
+>
+YMAX
+!00000013
+200 constant ymax
+-*-
+>
+GO
+!0000007B
+: GO
+  cls gcls generate
+    99 0 do
+      ?term if key drop abort endif
+      i 3 mod 1+ i 3 and plot
+      loop
+;
+-*-
+v
+GCLS
+!00000046
+: GCLS  <graphics> 4 vmode
+        0 0 0 xmax 1- ymax 1- FILLBOX
+;
+-*-
+>
+ARRAY
+!0000000E
+DEFINE ARRAY
+-*-
+v
+DEFINE
+!00000088
+: DEFINE  CREATE
+        16 1024 * ALLOT
+        DOES>
+        SWAP DUP 16384 U< IF + ELSE ." Out of range, array" ABORT ENDIF
+
+;
+-*-
+^
+>
+GENERATE
+!0000021A
+: GENERATE
+        2 0 ARRAY C!
+        0 1 ARRAY C!            \ Changing the ARRAY initial values or
+        1 2 ARRAY C!            \
+        3 TOP !                 \ uncommenting this line and removing the
+                                \ trailing +1 changes the pattern.
+        11 0 DO                 \  |
+             1  TOP @ 1- DO     \  |
+                I ARRAY C@      \  V
+ (              J 3 AND IF 1+ ELSE 1- THEN 3 AND     ) 1+
+                TOP @ ARRAY C! 1 TOP +!
+             -1 +LOOP
+        LOOP
+;
+-*-
+v
+TOP
+!0000000E
+VARIABLE TOP
+-*-
+^
+>
+PLOT
+!0000017F
+( Color Rotation -> )
+: PLOT
+        RR !                     ( Save rotation)
+        xmax 2/ X ! ymax 2/ Y !
+          x @ y @                ( Initial point, color on stack)
+                1    array c@ rr @ + 3 and CURR
+        512 1 * 2 DO
+                I 1- ARRAY C@ RR @ + 3 AND PREV
+                I    ARRAY C@ RR @ + 3 AND CURR
+        LOOP drop drop drop
+;
+-*-
+v
+X
+!0000000C
+VARIABLE X
+-*-
+>
+Y
+!0000000C
+VARIABLE Y
+-*-
+>
+RR
+!0000000D
+variable rr
+-*-
+>
+PREV
+!000000AD
+: prev
+
+        dup 0 = if  2 y +! drop exit endif
+        dup 1 = if -3 x +! drop exit endif
+            2 = if -2 y +!      exit endif
+                    3 x +!
+;
+-*-
+>
+CURR
+!0000014C
+: CURR
+        dup 0 = if drop  2 y +!  L
+                         2 y +!  L exit endif
+        dup 1 = if drop -3 x +!  L
+                        -3 x +!  L exit endif
+            2 = if      -2 y +!  L
+                        -2 y +!  L exit endif
+                         3 x +!  L
+                         3 x +!  L
+;
+-*-
+v
+L
+!000000E7
+: L <graphics>
+  stack ab|abab ymax u< swap xmax u< and if
+    else drop drop X @ Y @ exit endif
+
+  moveto dup X @ Y @
+
+  stack ab|abab ymax u< swap xmax u< and if
+     else stack abcde|de exit endif
+
+  lineto moveto?
+;
+-*-
+^
+^
+^
+^

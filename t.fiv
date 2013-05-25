@@ -1,0 +1,899 @@
+T
+!00000573
+<scoreboard>
+<random>
+<clock>
+: t
+  ['] tickbeat drop             \ Include this man
+  titlescreen                   \ put up a title screen
+  init_rand                     \ initialize the random number generator
+  cls
+  begin
+    5 10 gotoxy ." Play level (0-9) or ESC? "
+    0 begin
+      drop key
+      dup 27 = if
+        drop cls
+[ TURNKEYING -1 = ] IF{
+        vbname 1 open if
+          ." Writing out high scores " cr
+          vboard  slotwidth 10 * stack abc|abca write drop drop
+          close if else drop endif
+        else
+          ." error " . ." writing out high scores."
+        endif
+        exit
+}ELSE{ [ TURNKEYING 1 = ] IF{
+        snapshot
+        bye
+     }ELSE{
+        exit
+     }ENDIF
+}ENDIF
+      endif
+      ` 0 - dup 10 u<
+    until 10 swap - speed !      \ Figure speed
+    0 score ! 0 rows !          \ New game
+    title                       \ Show off
+    0 score+                    \ Show score
+    stats 7 4 * 0 fill          \ erase the statistics area
+    0 svoffset gotoxy
+    7 0 do i . ." :     0" cr loop \ put up the block numbers
+    0 svoffset 7 + gotoxy ." # dropped:"
+    play                        \ Play game
+    cls
+    0 score+                    \ Show score
+    sethighscore                \ set new high score, if any
+    5 10 gotoxy ." Press ESC..."
+    begin key 27 = until
+  0 until
+;
+-*-
+v
+TURNKEYING
+!00000062
+\       -1      turnkey
+\        0      memory
+\        1      snapshot
+0 constant turnkeying
+-*-
+>
+.R
+!0000004B
+: .r    ( n w -- )
+  swap <# #s #> stack abc|bcac - 0 max spaces type
+;
+-*-
+>
+<TIME>
+!00000020
+\ Time package
+package <time>
+-*-
+v
+MONTH
+!000000F1
+\ Table of days per month
+create month
+  0 w,
+ 31 w,   \ Jan
+ 59 w,   \ Feb
+ 90 w,   \ Mar
+120 w,   \ Apr
+151 w,   \ May
+181 w,   \ Jun
+212 w,   \ Jul
+243 w,   \ Aug
+273 w,   \ Sep
+304 w,   \ Oct
+334 w,   \ Nov
+365 w,   \ Dec
+-*-
+>
+DAY
+!0000001E
+\ Day of month
+variable day
+-*-
+>
+MO
+!00000016
+\ Month
+variable mo
+-*-
+>
+YR
+!00000021
+\ Years since 1980
+variable yr
+-*-
+>
+GETIME
+!000003DF
+\ ( -> time ) Return the time in seconds since Jan 1, 1980
+: getime
+  0 0 0 h# 2A00 h# 21 int stack abcde|c \ Get the date
+  dup h# FFFF and 1980 - yr !           \ Figure years
+  16 shr dup h# FF and day ! 8 shr 1 - mo ! \ Figure day of month, month
+  -1 day +!                             \ Zero base days
+  mo @ 1 shl month + w@ day +!          \ Add days for months to total
+  yr @ dup 365 * over 2/ 2/ + 1+ day +! \ Add days for years to total
+  3 and 0= if                           \ Leap year?
+    mo @ 2 <= if                        \ Before Feburary?
+      -1 day +!                         \ Yes, fix overkill for leap year
+    endif
+  endif
+
+  0 0 0 h# 2C00 h# 21 int stack abcde|c \ Get the time
+  dup h# FF and 60 * mo !               \ Store minutes as seconds
+  8 shr dup h# FF and 3600 * mo +!      \ Add hours as minutes
+  16 shr mo +!                          \ Add seconds
+
+  day @ 86400 * mo @ +                  \ Add seconds for days to total
+
+;
+-*-
+>
+DELAY
+!00000090
+\ ( time -> ) Delay given number of seconds
+: delay
+  getime +
+  begin
+    ?term if drop exit endif
+    getime over >
+  until
+  drop
+;
+-*-
+^
+>
+<SCOREBOARD>
+!00000016
+package <scoreboard>
+-*-
+v
+ROWS
+!00000029
+\ Number of rows cleared
+variable rows
+-*-
+>
+SPEED
+!0000001E
+\ Game speed
+variable speed
+-*-
+>
+SCORE
+!00000028
+\ Your worthless score
+variable score
+-*-
+>
+VBNAME
+!00000021
+: vbname
+  " vanity.brd" 1+
+;
+-*-
+>
+SLOTWIDTH
+!00000017
+17 constant SLOTWIDTH
+-*-
+>
+VBOARD
+!00000042
+create vboard 10 SLOTWIDTH * allot
+vboard 10 SLOTWIDTH * 0 fill
+-*-
+>
+SVOFFSET
+!00000016
+15 constant svoffset
+-*-
+>
+SHOWSCORE
+!0000013B
+: showscore     ( indx -- )
+  indx !
+  20 12 indx @ + gotoxy indx @ 1 +  2 .r 32 emit \ print out score #
+  vboard indx @ SLOTWIDTH * + dup count type     \ print out name
+  dup 12 + @   40 12 indx @ + gotoxy 4 .r        \ print out score
+  16 + c@  47 12 indx @ + gotoxy 2 .r            \ print out level
+;
+-*-
+v
+INDX
+!0000000F
+variable indx
+-*-
+^
+>
+SHOWSCORES
+!00000035
+: showscores
+  10 0 do
+    i showscore
+  loop
+;
+-*-
+>
+TITLESCREEN
+!00000131
+: titlescreen
+  cls
+[ TURNKEYING ] IF{
+  vbname 2 open
+  if
+    vboard [ 10 SLOTWIDTH * ] literal stack abc|abca read drop drop
+    close if else drop endif
+  else
+    drop vbname 0 createfile drop drop
+  endif
+}ENDIF
+  30 10 gotoxy ." Tetris "
+  showscores cr ." Press a key..." key drop
+;
+-*-
+>
+SETHIGHSCORE
+!0000049D
+: sethighscore
+  score @ vboard
+  10 0 do                               \ search for a slot
+    i SLOTWIDTH * over + 12 + @
+    stack abc|abca
+    < if                                \ found one
+      dup i SLOTWIDTH * + dup           \ source for move
+      dup SLOTWIDTH +                   \ dest for move
+      stack ab|baab                     \ kludge around fifth 2.6 bug
+      10 i - 1- SLOTWIDTH *             \ length for move
+      dup 0= if  stack abcde| else
+        move                            \ make room in table for new score
+        c@ swap c!                      \ rest of kludge
+      endif
+      dup 12 0 fill                     \ erase the name
+      dup 12 + score @ swap !           \ stuff the score in
+      dup 16 + speed @ 10 swap - swap c! \ stuff the level in
+      showscores                        \ put up the scoreboard
+      23 12 i + gotoxy                  \ move to the right place
+      1+ 11 expect                      \ get name
+      dup -1 = if drop 0 endif          \ handle esc's and fkeys
+      swap 1- c!                        \ stuff in length
+      leave
+    endif
+  loop drop drop
+  showscores
+;
+-*-
+>
+SCORE+
+!00000115
+\ ( num -> ) Add to score, redisplay
+<scoreboard>
+: score+
+  11 speed @ - * score +! \ Scale score by speed
+  5 5 gotoxy
+  ." Score: " score @      6 .r         \ Show score
+  5 6 gotoxy
+  ." Rows:  " rows  @      6 .r
+  5 7 gotoxy
+  ." Level: " 10 speed @ - 6 .r
+;
+-*-
+^
+>
+<RANDOM>
+!00000012
+package <random>
+-*-
+v
+STATS
+!0000002E
+create stats 7 4 * allot
+stats 7 4 * 0 fill
+-*-
+>
+_R_TABLESIZE
+!0000001A
+55 constant _R_TABLESIZE
+-*-
+>
+_R_TABLE
+!00000028
+create _r_table _R_TABLESIZE 4 * allot
+-*-
+>
+_R_IDX
+!00000011
+variable _r_idx
+-*-
+>
+SEED
+!0000000F
+variable seed
+-*-
+>
+IRAND
+!0000004C
+\ ( -> rand )
+<scoreboard>
+: irand
+  seed @ 47421 * 917 + dup seed !
+;
+-*-
+>
+NRAND
+!00000252
+\ ( n -> rand ) Generate random number 0 -- n using
+\               the additive congruential method
+<scoreboard>
+: nrand
+  _r_table dup _r_idx @ 2 shl + @               \ get a[i]
+  _r_idx @ 1+ _R_TABLESIZE mod stack abc|acbac
+  2 shl + @                                     \ get a[(i+1)%tablesize]
+  xor >r                                        \ xor the two nums
+  swap _r_idx @ 2 shl + r@ 1+ swap !            \ update the seed_table
+  _r_idx !                                      \ update the table ptr
+  r> irand + 8 shr swap mod                     \ fixup the rand num
+;
+-*-
+>
+INIT_RAND
+!000001B7
+\ initialize the random number generator
+<scoreboard> <time>
+: init_rand     ( -- )
+  getime seed !                         \ base our random # on our clock
+  _R_TABLESIZE 0 do
+    irand _r_table i 2 shl + !          \ stuff the seed table
+  loop
+  0 _r_idx !                            \ initialize the index
+  stats [ 7 4 * ] literal 0 fill        \ initialize the statistics table
+  1000 0 do
+    31415 nrand drop
+  loop
+;
+-*-
+>
+RAND
+!000000DE
+\ ( -> rand ) Generate random number 0-6
+<scoreboard>
+: rand
+  7 nrand                                         \ get random num
+  dup 2 shl stats +
+  dup @ 1+  stack abc|acacb
+  !   5 swap svoffset + gotoxy 4 .r
+;
+-*-
+>
+TEST_RAND
+!00000044
+: test_rand
+  init_rand
+  begin
+    chisquare
+  ?term until
+;
+-*-
+v
+CHISQUARE
+!00000139
+: chisquare     ( -- )
+  stats [ 7 4 * ] literal 0 fill
+  NUMREPS 0 do          \ collect random numbers
+    7 nrand             \ get a random number
+    2 shl stats + 1 swap +!     \ and update the table
+  loop
+  0
+  7 0 do
+    i 2 shl stats + @ dup * +
+  loop
+  7 * NUMREPS / NUMREPS - 7 - abs .
+;
+-*-
+v
+NUMREPS
+!00000016
+300 constant NUMREPS
+-*-
+^
+^
+^
+>
+<CLOCK>
+!00000011
+package <clock>
+-*-
+v
+TICKER
+!00000027
+\ Current clock tick
+variable ticker
+-*-
+>
+TICKBEAT
+!00000062
+\ Interrupt to bump the ticker counter 18.2 times a second
+
+28 :int tickbeat
+  1 ticker +!
+;
+-*-
+>
+TICKER@
+!00000024
+: ticker@
+  ticker int[ @ ]int
+;
+-*-
+^
+>
+<SCREEN>
+!00000012
+package <screen>
+-*-
+v
+XXX
+!0000006C
+: xxx
+  cls
+  256 0 do
+    i screen i 10 * + c!
+    i 5 * 1+ 80 /mod gotoxy i .
+  loop
+  key drop
+;
+-*-
+>
+PS
+!0000005C
+( x y char -> ) \ Put char on screen
+: ps
+  >r 160 * swap 1 shl + screen + r> swap c!
+;
+-*-
+>
+GS
+!00000053
+( x y -> char ) \ Get char from screen
+: gs
+  160 * swap 1 shl + screen + c@
+;
+-*-
+>
+WIDX
+!00000028
+\ Width of play area
+20 constant widx
+-*-
+>
+COL
+!00000024
+\ Starting column
+40 constant col
+-*-
+>
+BCOLOR
+!00000028
+\ Background color
+32 constant bcolor
+-*-
+^
+>
+TITLE
+!00000195
+\ Useless title
+<screen>
+: title
+  cls
+  24 0 do
+    col 1-        i 186 ps
+    col 2-        i 186 ps
+    col widx +    i 186 ps
+    col widx + 1+ i 186 ps
+  loop
+  24 0 do
+    col widx + col do
+      i j bcolor ps
+    2 +loop
+  loop
+  col 2-        24 200 ps
+  col 1-        24 202 ps
+  col widx +    24 202 ps
+  col widx + 1+ 24 188 ps
+  widx 0 do
+    col i + 24 205 ps
+  loop
+;
+-*-
+>
+PLAY
+!0000013E
+\ Play game till dead
+: play
+  0 #dropped !                  \ so far, we haven't dropped any
+  0 next ! launch               \ Set new next piece
+  launch draw-me                \ Somebody new
+  begin dokey if exit endif     \ Handle keys until ESC or dead
+  fall until                    \ Fall until dead
+;
+-*-
+v
+PIECES
+!00000495
+\ A list of the pieces, 4 rotations of 7 varieties
+create pieces
+
+o o o o   o x o o   o o o o   o x o o
+x x x x   o x o o   x x x x   o x o o
+o o o o   o x o o   o o o o   o x o o
+o o o o   o x o o   o o o o   o x o o
+
+o x o o   o o o o   o x o o   o x o o
+o x x o   x x x o   x x o o   x x x o
+o x o o   o x o o   o x o o   o o o o
+o o o o   o o o o   o o o o   o o o o
+
+o x o o   o o o o   o o o o   o o o o
+o x o o   o x x x   o x x o   o o x o
+o x x o   o x o o   o o x o   x x x o
+o o o o   o o o o   o o x o   o o o o
+
+o o x o   o o o o   o o o o   o o o o
+o o x o   o x o o   o x x o   x x x o
+o x x o   o x x x   o x o o   o o x o
+o o o o   o o o o   o x o o   o o o o
+
+o x o o   o o o o   o o o o   o o o o
+o x x o   o o x x   o x o o   o x x o
+o o x o   o x x o   o x x o   x x o o
+o o o o   o o o o   o o x o   o o o o
+
+o o x o   o o o o   o o o o   o o o o
+o x x o   o x x o   o o x o   x x o o
+o x o o   o o x x   o x x o   o x x o
+o o o o   o o o o   o x o o   o o o o
+
+o o o o   o o o o   o o o o   o o o o
+o x x o   o x x o   o x x o   o x x o
+o x x o   o x x o   o x x o   o x x o
+o o o o   o o o o   o o o o   o o o o
+-*-
+v
+O
+!0000000C
+: o 0 c, ;
+-*-
+>
+X
+!0000000C
+: x 1 c, ;
+-*-
+^
+>
+CUR-PIECE
+!0000004E
+\ The current piece - as an offset into the pieces array
+variable cur-piece
+-*-
+>
+X
+!00000025
+\ Upper-left X of piece
+variable x
+-*-
+>
+Y
+!00000025
+\ Upper-left Y of piece
+variable y
+-*-
+>
+PIECE-NUM
+!00000024
+\ Piece number
+variable piece-num
+-*-
+>
+DRAW-ME
+!000000EF
+\ ( -> ) Draw a piece at X,Y
+<screen>
+: draw-me
+  4 0 do
+    4 0 do
+      cur-piece @ i + j 4 shl + c@ if
+        i i + x @ + j y @ + over 1+ over piece-num @ color-tab + c@
+        >r r@ ps r> ps
+      endif
+    loop
+  loop
+;
+-*-
+v
+COLOR-TAB
+!00000044
+create color-tab
+176 c, 177 c, 178 c, 219 c, 176 c, 177 c, 178 c,
+-*-
+^
+>
+ERASE-ME
+!000000CD
+\ ( -> ) Draw a piece at X,Y
+<screen>
+: erase-me
+  4 0 do
+    4 0 do
+      cur-piece @ i + j 4 shl + c@ if
+        i i + x @ + j y @ + over 1+ over 32 ps bcolor ps
+      endif
+    loop
+  loop
+;
+-*-
+>
+TEST-ME
+!000000F0
+\ ( -> test-me) Test for ok
+<screen>
+: test-me
+  4 0 do
+    4 0 do
+      cur-piece @ i + j 4 shl + c@ if
+        i i + x @ + j y @ + gs bcolor = not if 1 exit endif
+      endif
+    loop
+  loop
+  0                     \ All OK
+;
+-*-
+>
+NEXT
+!00000021
+\ The next piece
+variable next
+-*-
+>
+#DROPPED
+!0000003F
+\ # of blocks dropped so far
+variable #dropped
+0 #dropped !
+-*-
+>
+LAUNCH
+!0000025D
+\ ( -> ) Launch a new piece
+<scoreboard>
+<random>
+<screen>
+: launch
+  next @ dup setpiece           \ Set old next piece & save
+  70 x ! 18 y ! erase-me        \ Erase old next piece
+
+  rand dup next ! setpiece      \ Figure new next piece
+  draw-me                       \ Draw new next piece
+
+  setpiece                      \ Set old next as current again
+  col widx 2/ + 2- x !          \ Middle of screen
+  0 y !                         \ At top
+  1 #dropped +!                 \ we have dropped one more piece
+  12 svoffset 7 + gotoxy #dropped @ 4 .r        \ print out total cnt
+;
+-*-
+v
+SETPIECE
+!00000063
+\ ( n -> ) Set a piece as current
+: setpiece
+  dup piece-num !
+  6 shl pieces + cur-piece !
+;
+-*-
+^
+>
+FALL
+!000002E9
+\ ( -> dead ) Dead flag
+: fall
+  erase-me                      \ Nuke old
+  1 y +!                        \ Drop down one
+  test-me if                    \ Check for clear
+    -1 y +!                     \ Not clear, fix Y
+    draw-me                     \ Show in old position
+    y @ dup 4 + 24 min swap do  \ For all rows just touched
+      i chop-row                \ See if can remove row
+    loop                        \
+    launch                      \ And launch a new piece
+    test-me                     \ New piece fit? (1 if no)
+  else                          \
+    0                           \ Otherwise always work
+  endif                         \ Clear
+  draw-me                       \ Draw new position
+;
+-*-
+v
+CHOP-ROW
+!00000280
+\ ( y -> ) Check given row to see if can remove
+<scoreboard>
+<screen>
+: chop-row
+  y !                            \ Save row
+  col widx + col do              \ Loop thru row
+    i y @ gs bcolor = if exit endif \ All clear?
+  loop
+
+  0 y @ 1- do                   \ Loop thru, dropping all rows
+    i 160 * [ col dup + ] literal + screen + dup 160 +
+    [ widx dup + ] literal move  \ Copy it down
+  -1 +loop
+
+  1 rows +!                     \ Another row
+  1 score+ 7 emit               \ Tell 'em good
+  rows @ 10 mod 0= if           \ Every ten rows
+    speed @ 1- 1 max speed !    \ Speed up till max speed
+  endif
+;
+-*-
+v
+Y
+!0000000C
+variable y
+-*-
+^
+^
+>
+DOKEY
+!00000362
+\ ( -> ESC-flag) Handle keys until time-out or null
+<scoreboard>
+<clock>
+: dokey
+  ticker@ speed @ + time !   \ Get starting value+speed
+  begin                                 \ Loop for time
+    ?term if key                        \ Handle keys
+      dup 32  = if drop'em endif        \ Space bar - drop 'em
+      dup ` 7 = if left endif           \ Left
+      dup ` 8 = if rotate endif         \ Rotate
+      dup ` 9 = if right endif          \ Right
+      dup ` 6 = if speedup endif        \ speed up
+      dup ` 4 = if drop'em endif        \ drop block
+      dup ` p = over ` p 32 + = or if pause endif       \ hold game
+      27 = if 1 exit endif              \ ESC ends game
+    endif                               \ Loop for keys
+  ticker@ time @ >= until    \ Loop until reach time
+  0                                     \ Return null
+;
+-*-
+v
+TIME
+!0000001C
+\ Drop-time
+variable time
+-*-
+>
+DROP'EM
+!00000227
+\ ( -> ) Drop 'em in place
+<scoreboard>
+<clock>
+: drop'em
+  erase-me                      \ Clear it
+  y @                           \ remember old pos
+  begin                         \ Loop
+    1 y +!                      \ Drop one
+  test-me until                 \ Loop until won't go
+  -1 y +!                       \ Back up one
+  draw-me                       \ And show me
+  y @ stack ab|baba - 0 max 1 shr score+        \ get points
+  - 2 > if dokey drop endif
+  ticker int[ @ ]int time !     \ Out of time; next piece please
+;
+-*-
+>
+LEFT
+!000000DD
+\ ( -> ) Move block left
+: left
+  erase-me      \ Clear old
+  -2 x +!       \ Go left
+  test-me if    \ Check for walls
+    2 x +!      \ Oops, back up
+  endif         \
+  draw-me       \ And draw new position
+;
+-*-
+>
+RIGHT
+!000000E0
+\ ( -> ) Move block right
+: right
+  erase-me      \ Clear old
+  2 x +!        \ Go right
+  test-me if    \ Check for walls
+    -2 x +!     \ Oops, back up
+  endif         \
+  draw-me       \ And draw new position
+;
+-*-
+>
+ROTATE
+!00000101
+\ ( -> ) Rotate block
+: rotate
+  erase-me      \ Clear old
+  cur-piece @ 12 + h# FFFFFFCC and cur-piece !
+  test-me if    \ Check for walls
+    cur-piece @ 4 + h# FFFFFFCC and cur-piece !
+  endif         \
+  draw-me       \ And draw new position
+;
+-*-
+>
+SPEEDUP
+!00000054
+<scoreboard>
+: speedup
+  speed @ 1- 0 max speed !              \ adjust speed
+;
+-*-
+>
+PAUSE
+!000001E9
+<scoreboard>
+<clock>
+: pause
+  0 0 gotoxy ." 100:"
+  ticker@ firsttick !        \ get our starting time
+  begin
+    firsttick @ if
+      ticker@ firsttick @ - [ 100 18 * ] literal > if
+        4 0 gotoxy ." ok "
+        0 firsttick !
+      endif
+    endif
+    ?term if
+      key dup ` p = swap ` p 32 + = or
+    else
+      0
+    endif
+  until
+  ticker@ firsttick @ -  dup 100 18 * < if
+    10 * negate score+
+  else
+    drop
+  endif
+  0 0 gotoxy ."            "
+;
+-*-
+v
+FIRSTTICK
+!00000014
+variable firsttick
+-*-
+^
+^
+^
+>
+TETRIS
+!0000002A
+: tetris
+  ['] bye i->d error !
+  t
+;
+-*-
+v
+BYEBYE
+!00000014
+: byebye
+  bye
+;
+-*-
+^
+^

@@ -1,0 +1,374 @@
+X
+!00000000
+-*-
+v
+^
+!00000112
+\ This exponent program does not work well on numbers close to zero.
+\ For example, .01 2. ^  yields:  .0000709  (It should be .0001)
+\
+\ We wrote a ^ module that works fine, but I don't have it. Put yours
+\ in instead of this one.
+float
+: ^
+  fswap flog f* fexp
+;
+-*-
+>
+:=
+!0000022B
+( addr -> )
+\ Compiles the following expression storing the results at addr. The expression
+\ is terminated by a semicolon. If any thing is not in the operator list, it is
+\ considered a variable.  You can easily die if you mess up and put a module in
+\ as a variable.
+float
+: :=
+  state c@ 0= abort" Assignment statments are only allowed in compile mode."
+  >in @ 10 text >in !
+  pad 1- buff 150 move             \ Save the expression for error messages.
+  ['] abort 64
+  express
+  drop drop drop drop
+  compile f!
+  1 >in +!
+; immediate
+-*-
+v
+PP
+!0000024D
+\ This is a debugging print routine.
+
+
+: pp    0    \ <<<--- If this is a 1, run time trace occurs on expressions.
+             \                is a 2, the postfix expression is printed.
+             \                is none of the above, nothing happens.
+
+ dup 1 = if                  \ Run time debugging.
+    drop
+    [compile] literal    compile count   compile type
+compile .s
+    compile key          compile drop
+ else
+    2 = if                  \ Compile time debugging
+      count type
+    else
+      drop                  \ No debugging.
+    endif
+ endif
+;
+-*-
+>
+BUFF
+!00000017
+create buff 200 allot
+-*-
+>
+OPLIST
+!000001AC
+\ ( string -> addr num )
+\ Returns the address and number of the operator or identifier.
+\       Operator   Num
+\       --------------
+\       constant   0
+\       variable   8
+\       +          16
+\       -          24
+\       *          32
+\       /          40
+\       (          48
+\       )          56
+\       ;          64
+\       [          72
+\       ]          80
+\       ^          88
+define oplist
+-*-
+v
+DEFINE
+!000004DB
+float
+: define
+  create           \ Create the module.
+  here             \ Address of number of entries.
+  0 ,              \ Number of entries spot.
+  here             \ Addr of beginning of list.
+  " +" ,   ['] f+ ,      \ All arithmetic is done in floating point.
+  " -" ,   ['] f- ,
+  " *" ,   ['] f* ,
+  " /" ,   ['] f/ ,
+  " (" ,   ['] abort ,   \ Left paren.
+  " )" ,   ['] abort ,   \ Right paren.
+  " ;" ,   ['] abort ,   \ End of statement marker.
+  " [" ,   ['] abort ,   \ Begin subscript (or function) marker.
+  " ]" ,   ['] abort ,   \ Close subscript (or function) marker.
+  " ^" ,   ['] ^ ,       \ You must supply exponent routine.
+  here swap -      \ Compute length of list.
+  swap !           \ Save this away. (Number of entries = length/8)
+does>
+  dup 4 + swap @ 0 do
+    stack ab|abab @ str= if
+      swap drop 4 + @ i 16 + exit
+    endif
+    8 +
+  8 +loop
+  drop dup find
+  -1 = if stack ab|b 8 exit                             \ Token
+  else a->i swap c@ 0= if stack ab|b i->f 0 exit endif  \ Integer
+    drop a->f s->f c@ 0= if 0 exit endif                \ Float
+  endif
+  0 24 gotoxy cr cr buff count type cr
+  ." Token Not Found error in := statement:  " count type cr cr abort
+;
+-*-
+v
+STR=
+!00000101
+( str1 str2 -> flag )
+\ flag = -1 if str1 = str2
+\      otherwise flag = 0
+: str=
+  over c@ 1+ 0 do                    \ For 0 to character count do:
+    over c@ over c@ =
+    if else drop drop 0 exit endif
+    1+ swap 1+
+  loop
+  drop drop -1
+;
+-*-
+^
+^
+>
+PREC
+!0000000D
+define prec
+-*-
+v
+DEFINE
+!00000585
+: define
+  create
+\       0     8     16    24    32    40    48    56    64   72     80    88
+\       lit   var   +     -     *     /     (     )     ;    [      ]     ^
+\    +----------------------------------------------------------------------
+( lit) 15 c, 15 c,  0 c,  0 c,  0 c,  0 c, 15 c,  1 c,  1 c, 15 c,  1 c,  0 c,
+( var) 15 c, 15 c,  0 c,  0 c,  0 c,  0 c, 15 c,  1 c,  1 c, 15 c,  1 c,  0 c,
+( +  )  1 c,  1 c,  1 c,  1 c,  0 c,  0 c, 15 c,  1 c,  1 c, 15 c,  1 c,  0 c,
+( -  )  1 c,  1 c,  1 c,  1 c,  0 c,  0 c, 15 c,  1 c,  1 c, 15 c,  1 c,  0 c,
+( *  )  1 c,  1 c,  1 c,  1 c,  1 c,  1 c, 15 c,  1 c,  1 c, 15 c,  1 c,  0 c,
+( /  )  1 c,  1 c,  1 c,  1 c,  1 c,  1 c, 15 c,  1 c,  1 c, 15 c,  1 c,  0 c,
+( {  )  1 c,  1 c,  0 c,  0 c,  0 c,  0 c,  0 c,  2 c, 15 c, 15 c, 15 c,  0 c,
+( }  ) 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c,
+( ;  )  0 c,  0 c,  0 c,  0 c,  0 c,  0 c,  0 c, 15 c,  3 c, 15 c, 15 c,  0 c,
+( [  )  1 c,  1 c,  0 c,  0 c,  0 c,  0 c,  0 c, 15 c, 15 c, 15 c,  4 c,  0 c,
+( ]  ) 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c, 15 c,
+( ^  )  1 c,  1 c,  1 c,  1 c,  1 c,  1 c,  0 c,  1 c,  1 c, 15 c,  1 c,  0 c,
+does>
+  stack abc|bca 8 / stack abc|bca 8 /
+  swap 12 * + dup 144 u< if else
+    0 24 gotoxy cr
+    buff count type
+    ." You have an ill eagle in your := statement " abort
+  endif
+  + c@
+;
+-*-
+^
+>
+EXPRESS
+!0000035C
+\ ( -> ) Compiles an expression pointed to by >in.
+float
+: express
+  32 word oplist                           \ Get a token.
+  dup 0 = if drop "  c" pp [compile] fliteral else \ Compile a constant.
+    dup 8 = if drop                        \ This is a variable or array.
+      array?                               \ Compile subscripts if an array.
+      "  a" pp
+      [compile] literal                    \ Compile execution address.
+      compile execute compile f@ else      \ Compile an EXECUTE and a Fetch.
+      dup 48 = if express else
+        dup 56 = if reduce express else    \ End of parenthesis?
+          0 24 gotoxy cr cr buff count type cr
+          ." Something is out of order in your := statement! " cr cr abort
+        endif
+      endif
+    endif
+  endif
+  32 word oplist reduce                    \ Reduce operators.
+;
+-*-
+v
+ARRAY?
+!00000205
+\ Check to see if we are dealing with an array. If so, evaluate the subscripts.
+float
+: array?
+  >in @ 32 word oplist dup 72 = if   \ Is it an array?
+    "  [" pp
+    stack abc|bc                     \  If so, get rid of the text pointer.
+    express                          \ Evaluate the subscript expression.
+    compile f->i                     \ Force to integer
+  else
+    drop drop >in !                  \ Restore the text pointer if it's not
+  endif                              \   an array.
+;
+-*-
+>
+REDUCE
+!0000037C
+\ Reduces an operator.
+float
+: reduce
+  stack ABCD|ABCDBD
+  prec                                       \ Get precedence code.
+  dup 1 = if                                 \ 1 = Reduce an operator.
+    stack ABCDE|CDA
+    "  &" pp
+    [compile] literal compile execute
+    reduce exit
+  endif
+  dup 4 = if                                 \ End a subscript.
+    "  ]" pp
+    drop drop drop drop drop                 \ Drop brackets, and
+    array? exit                              \  check for more subscripts.
+  endif
+  dup 2 = if drop drop drop drop drop exit endif  \ Remove paren's from stack.
+  dup 15 = if                                \ An ill eagle state found.
+    0 24 gotoxy cr cr buff count type cr
+    ." I can't figure out your := statement.  Sorry." cr cr abort
+  endif
+  3 = if exit endif                          \ End of statement found.
+  express
+;
+-*-
+^
+^
+>
+README
+!0000055D
+float
+: readme
+
+\ These are some examples of expressions.
+
+a := 3.5 + 1.0 + -6.7 - 8.001 * 3.5 + 7.6 ;
+
+\ Every token ( a number, operator, variable ) MUST be seperated by a space.
+
+5 0 do
+  i i->f k f!
+  3 d     := 7.5 ;
+  2 k @ e := 9.6 ;
+  3 d     := d [ 3 ] + e [ 2 ] [ k ] ;
+loop
+
+\ Notice that to the left of the := you use Fifth code to get the address
+\ the results of the expression are to be stored at.
+\ Notice how pairs of subscripts can be specified.   This is the same as
+\ Basic's  e(2,5).  This is the same notation C uses.  The subscripts are
+\ handled by the array, NOT by :=.  See E ad D's definition.
+\ Another limitation is that I can not be used as a subscript.  Store I in
+\ a convienent variable, then use the variable.
+
+a := 5. + 2. * 0. ;          \ Same as a := 5. + ( 2. * 0. ) ;
+c := a + a * 2. ^ 3. ^ 2. ;  \ Same as a := a + ( a * ( 2. ^ ( 3. ^ 2. ) ) ) ;
+
+\ The order of operations between operators hold. A little "behind the scenes"
+\ explaination is in order now.  What does the := module do? Given the
+\ following:
+\
+\      := 4. + 3. * 7.
+\
+\ The := module compiles the code to do:
+\
+\      4. 3. 7. f* f+ f!
+\
+\ Thus If you neglect to leave a valid address on the stack, := is going to
+\ blow up.  Also, if you specify a procedure instead of a variable, your
+\ system will most likely crash.
+;
+-*-
+v
+A
+!00000013
+float fvariable a
+-*-
+>
+B
+!00000013
+float fvariable b
+-*-
+>
+C
+!00000013
+float fvariable c
+-*-
+>
+D
+!000000A8
+( subscript -> address )
+\ D is a 10 element array.  See DEFINE below for D's definition.
+\ Takes the subscript and returns the address of that element.
+
+define d
+-*-
+v
+DEFINE
+!000002CD
+\ The execution of this module will create a array which takes a subscript
+\ from the stack and returns the address of that element.
+
+: define
+  create                 \ Create a module.
+  10 10 * allot          \ Allot room for 10 elements, 10 bytes each.
+does>                    \ Define this module's run time behavior.
+                         \  ( Remember that the address of beginning of the 10
+                         \    elements allotted above has been pushed on the
+                         \    stack prior to this code. )
+
+  swap dup 10 u< if else   \ Do range checking.
+    ." Out of range" abort
+  endif
+  10 * +          \ Multiply the subscript by 10, add to beginning address.
+ ;
+-*-
+^
+>
+E
+!000000A8
+( subscript subscript -> address )
+\ Expects two subscripts, returns address of the specified element.
+\ E is a 5x5 array.  See DEFINE for the definition.
+define e
+-*-
+v
+DEFINE
+!000003A6
+\ The execution of this module will create a array which takes two subscripts
+\ from the stack and returns the address of that element.
+
+: define
+  create                 \ Create a module.
+  5 5 * 10 * allot      \ Allot room for a 5x5 array, each element is 10 bytes.
+does>                    \ Define this module's run time behavior.
+                         \  ( Remember that the address of beginning of the
+                         \    first element has been pushed on the stack
+                         \    on top of the subscripts prior to the execution
+                         \    of this code. )
+  stack abc|cabab        \ Put subscripts on top of stack, address on bottom.
+  5 u< swap 5 u< and     \ Are both subscripts under 5?
+  if else                \ If not, you have an error.
+    ." Out of range" abort
+  endif
+  5 * + 10 * +        \ Multiply the subscript by 10, add to beginning address.
+ ;
+-*-
+^
+>
+K
+!00000013
+float fvariable k
+-*-
+^
+^

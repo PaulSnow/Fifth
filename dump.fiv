@@ -1,0 +1,51 @@
+DUMP
+!000002FC
+\ Hex dump a module
+\ Usage: dump module
+: dump
+  base @ oldbase ! 16 base !
+  0 q ! cr
+  ' dup dup getsize + swap do   \ Loop thru module
+    q @ 0= if                   \ Start of line
+      i <# # # # # # # # # #> type ." : "       \ Address at line start
+    endif
+    i c@ dup <# # # #> type space       \ Print a hex byte
+    line q @ + c! 1 q +!        \ Save byte in LINE
+    q @ 16 = if                 \ Got a complete line?
+      space ascii               \ Make room for ASCII
+      0 q !                     \ Ready for next line
+    endif
+  loop                          \ End of module
+  q @ ?dup if                   \ Half done last line?
+    16 swap - 3 * 1+ spaces ascii \ Skip over to ASCII
+  endif
+  cr oldbase @ base !
+;
+-*-
+v
+OLDBASE
+!00000012
+variable oldbase
+-*-
+>
+LINE
+!00000016
+create line 16 allot
+-*-
+>
+Q
+!0000000C
+variable q
+-*-
+>
+ASCII
+!0000010A
+: ascii
+  q @ 0 do                  \ Loop thru line
+    line i + c@ dup 32 < over 127 > or if
+      drop 46               \ Replace unprintable with decimal
+    endif emit              \ Show ASCII
+  loop cr                   \ End of line, ready for next
+;
+-*-
+^

@@ -1,0 +1,327 @@
+FIFTH
+!00000000
+-*-
+>
+}ENDIF
+!00000043
+\ End a IF{ ... }ELSE{ ... }ENDIF construct
+: }endif ; immediate
+-*-
+>
+}ELSE{
+!000000DF
+\ Select the false-body code of IF{ ... }ELSE{ ... }ENDIF construct.
+: }else{
+  begin
+    0 word dup count 0= if ." Missing }ENDIF" abort endif drop
+    find abs 1- if drop 0 endif
+    ['] }endif = until
+; immediate
+-*-
+>
+IF{
+!00000157
+\ A compile-time, or from interactive level, skip sections of code.
+\ This allows conditional compilation. IF{ ... }ELSE{ ... }ENDIF
+: if{
+  if exit else
+    begin
+      0 word dup count 0= if ." Missing }ENDIF" abort endif drop
+      find abs 1- if drop 0 endif
+      dup ['] }endif = swap ['] }else{ = or until
+  endif
+; immediate
+-*-
+>
+`
+!000001BB
+\ Takes the next character in the input stream and generates the its ASCII
+\  value.  If the compiler is on, the code to push this ASCII representation
+\  onto the stack is generated. A compile error occurs if back-tic is followed
+\  by more than one character.
+
+: `
+  0 word count 1- abort" ASCII error"   \ Test for 1 character found
+  c@					\ Get character
+  state if [compile] literal endif	\ Literlize if compiling
+; immediate
+-*-
+>
+H#
+!00000152
+\ Generate an inline HEX constant,  a state sensitive word.
+
+: h#
+  base c@ hex		\ Get the current radix, set to hex
+  0 word a->i swap drop \ Get the numeric value of what follows
+  swap base c!		\ Restore the radix
+  state if		\ Compiling?
+    [compile] literal	\ Compile inline literal
+  endif 		\ Not compiling!
+; immediate
+-*-
+>
+HELP
+!0000061A
+\ ( -> ) HELP parses a help entry from the input stream, and displays help.
+\ Some entries allow further help.  HELP uses a string stack to keep up with
+\ control between sub helps and so forth. At compile time, NAMES is filled with
+\ an offset table.  At run time, HELP looks up the text entry, and displays it.
+: help
+  eflg @ -1 = if ['] names comp endif \ Recompile names if needed.
+  helpfile 0 open		  \ Open the helpfile.
+  0= if drop err exit endif	  \ If an error, abort.
+  h !				  \ Save handle of the helpfile.
+  0 word dup c@ 0= if		  \ Check and see if nothing follows.
+    drop " GEN-HELP"              \ If nothing follows, replace with HELP.
+  endif
+  dup a->i drop c@ 0= if	  \ Check to see if string is a number.
+    drop " INTEGERS"              \ Integer.
+  endif 			  \ Neither
+  1 cnt !			  \ Set the nexting count to one.
+  begin
+    search			  \ Display help.
+    ?dup 0= if -1 cnt +! else	  \ If the name is not found, back up a level.
+      dup 32 = over 27 = or over 13 = or if \ Check if exit is desired...
+	stack abc| -1 cnt +!	  \ Back help up a level.
+      else
+	97 - stack ab|baba c@ u<  \ Compute # items picked; Do a range check.
+	if
+	  4 + swap		  \ Pass up the item count.
+	  begin ?dup while 1- >r  \ Scan for # items (hide # on return stk.)
+	    dup 3000 0 scan + r>
+	  repeat
+	  1 cnt +!		  \ Increment the nexting level.
+	else
+	  drop drop		  \ If out of range, ignore.
+    endif endif endif
+  cnt @ 0= until		  \ So long as cnt > 0, do it.
+  h @ close if else drop endif
+;
+-1 eflg !
+-*-
+v
+CNT
+!0000005D
+\ count of how deep help is nested.  If this cnt falls to zero, help returns.
+variable cnt
+-*-
+>
+EFLG
+!00000012
+create eflg -1 ,
+-*-
+>
+HELPFILE
+!00000123
+\ ( -> addr ) addr points to the null ended string giving the path and
+\ the name of the help file. The file BLD.FIV contains the code used to
+\ build this file.
+: helpfile
+  " fifth.hlp" \ Returns pointer to a counted string
+  1+	       \ Increment past the count byte.
+;
+-1 eflg !
+-*-
+>
+NCNT
+!00000050
+\ Names CouNT.	Count of the number of entries in the help file.
+variable ncnt
+-*-
+>
+NLEN
+!00000053
+\ Names LENgth.  A variable holding the length of the names array.
+variable nlen
+-*-
+>
+H
+!0000000C
+variable h
+-*-
+>
+BOXIT
+!000003EC
+\ ( addr1 addr2 -> 8b )
+\ Figures out a minimum boxsize and titles the box using addr1, and fills the
+\ box with addr2. Returns the ascii code of the key pressed to remove the box.
+: boxit
+  ?term if drop drop key exit endif	\ Cheap lookahead
+  swap title !		\ Save away the title.
+  0	 >r		\ Put the line count on the return stack.
+  dup			\ Make a copy of the address to count lines with.
+  begin
+    dup  80 13 scan	\ Find the next linefeed
+    over 2048  0 scan	\ Find the end of text
+    over >		\ If the next linefeed is not passed the end of text
+    over 0= not and if	\   and a line feed was found,
+      + 		\ Punch the address by the offset
+      r> 1+ >r		\ Increment the line count
+      0 		\ Keep looking for the end of text. (0 for until)
+    else drop -1	\ Done! ( -1 for until)
+    endif
+  until
+  drop
+  r> swap >r >r 	\ Put address under line count.
+  0 24 r> - 2- 79 24 79 30 title @ r> popbox
+  dup ` A < over ` Z > or 0= if 32 or endif \ force lowercase.
+;
+-*-
+v
+TITLE
+!00000010
+variable title
+-*-
+^
+>
+ERR
+!00000143
+\ ( -> ) Prints an error message.  Sets the error flag EFLG .
+: ERR
+  0 word drop
+  3 10 76 13 79 30
+  helpfile
+" HELP could not find this file.  Correct the name and/or the path.  The
+name and path is specified in the module HELPFILE under the module HELP."
+  1+ popbox drop
+  -1 eflg !			\ Indicate an error.
+;
+-*-
+>
+NAMES
+!00000013
+create names nbld
+-*-
+v
+NBLD
+!00000380
+\ ( -> ) Names list BuiLD routine.
+\ Builds the name list. Sets the value of NCNT and NLEN.
+\ Following the names list is the list of file offsets for each entry.
+: nbld
+  helpfile 0 open		\ Open the help file
+  0= if
+    drop exit			\ If I did not succeed, Indicate an error.
+  endif
+  h !				\ Save the file handle
+  nlen 4 h @ read drop drop	\ Read names length (assume the read worked).
+  ncnt 4 h @ read drop drop	\ Read entry count (assume the read worked).
+  ncnt @ 2 < if err endif	\ I insist on at least two entries!
+  nlen @ 10 + allot		\ Allocate room for the names list.
+  ncnt @ 4 * allot		\ Allocate room for the file offsets.
+  names nlen @ ncnt @ 4 * +	\ Read in the names list and the file offsets
+  h @ read drop drop		\   (assume as above).
+  h @ close if else drop endif	\ Close the file (assume close succeeds).
+  0 eflg !			\ Indicate that all is well!
+;
+-*-
+^
+>
+SEARCH
+!0000040B
+\ ( addr1 -> addr2 addr3 8b ) Searches names for a match with addr1.  If found,
+\ displays the text in a popbox. Returns addr3, the address of the menu list
+\ and addr2, the address of the name in the names array.
+\ (or a null (zero) if the entry is not found).
+: search
+  names
+  ncnt @ 0 do			\ For each name in the names list
+    over over str= if
+      stack ab|bb		\ If found, use names addr's; they stay good.
+      names nlen @ + i 4 * + @	\ Get the file offset.
+      0 h @ seek drop drop	\ Seek to the text (assume success).
+      buff 3000 h @ read drop drop \ Read in the text (assume success).
+      buff 3000 0 scan buff +	\ Compute address of menu list.
+      swap 1+ buff boxit	\ Skip count byte of entry name, display box.
+      ?dup 0= if -1 endif exit	\ Insure I don't return a null here.
+    endif
+    dup c@ + 2 +		 \ If not found, increment to the next name.
+  loop
+  drop 1+			\ Drop names address; Print not found message.
+  " I could not find this entry" 1+ boxit drop 0 \ Return a null.
+;
+-*-
+v
+BUFF
+!00000040
+\ Create a buffer to hold a menu entry
+create buff 3000 allot
+-*-
+^
+^
+>
+DO{
+!00000106
+\ A compile-time, or from interactive level, loop sections of code.
+\ This allows conditional compilation. term start DO{ ... }LOOP
+\ Values on return stack!
+: do{
+  r> >in @ >r stack abc|cba >r >r >r \ Setup index, terminator, backup for loop
+; immediate
+-*-
+>
+}LOOP
+!000001F7
+\ A compile-time, or from interactive level, loop sections of code.
+\ This allows conditional compilation. term start DO{ ... }LOOP
+\ Parms on return stack as:   loop-addr
+\			      term
+\			      index
+\			      return-from-}LOOP
+: }loop
+  r> r> 1+ r> stack ab|abab =	 \ Fetch return, index+1, term, test for exit.
+  if r> drop drop drop >r exit endif \ Drop loop-addr, all, stuff return back.
+  r@ >in !			 \ Backup input pointer
+  >r >r >r			 \ stuff all back to return stack
+; immediate
+-*-
+>
+BEGIN{
+!000000EE
+\ A compile-time, or from interactive level, loop sections of code.
+\ This allows conditional compilation. term start BEGIN{ ... }UNTIL
+\ Values on return stack!
+: begin{
+  r> >in @ >r >r	\ Setup backup address for loop
+; immediate
+-*-
+>
+}UNTIL
+!000001A5
+\ A compile-time, or from interactive level, loop sections of code.
+\ This allows conditional compilation. term start BEGIN{ ... }UNTIL
+\ Parms on return stack as:   loop-addr
+\			      return-from-}UNTIL
+: }until
+  if r> r> drop >r exit endif	\ Drop loop-addr, stuff return back, exit.
+  r>				\ Fetch return.
+  r@ >in !			\ Backup input pointer
+  >r				\ stuff return address back to return stack
+; immediate
+-*-
+>
+}REPEAT
+!000000A4
+\ Compile and interpretive execution of code.
+\ Used as BEGIN{ ... }WHILE{ .. }REPEAT
+: }REPEAT
+  r> r@ >in ! >r	\ Move text pointer to loop start
+; immediate
+-*-
+>
+}WHILE{
+!000001A8
+\ A compile-time, or from interactive level, skip sections of code.
+\ This allows conditional compilation. BEGIN{ ... }WHILE{ ... }REPEAT
+: }while{
+  if exit else
+    r> r> drop >r		\ Drop loop start address from return stack
+    begin			\ Search for closing }REPEAT
+      0 word dup count 0= if ." Missing }REPEAT" abort endif drop
+      find abs 1- if drop 0 endif
+      ['] }repeat = until
+  endif
+; immediate
+-*-
+^
