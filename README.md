@@ -10,11 +10,25 @@ to implement the first PostScript clone to Ship in a comerical Printer.
 (Printware's 720, in December of 1987)
 
 Fifth works very much like Forth, but provides this 
-really cool if terribly simple character monitor based UI.  Memory is 
+really cool if terribly simple character graphics based UI.  Memory is 
 managed using a heap instead of Forth's stack based memory management, 
 and the scoping is tree based rather than linear as in Forth.  Much of that
 won't mean much to you if you don't know Forth, and mostly won't matter
 much if you do.
+
+Features include:
+
+* Exports stand-alone executables.
+* Selective Trace of Words
+* Snapshot (let's you add your stuff to the environment)
+* Help (written in Fifth)
+* Floating point support (using a separate floating point stack)
+* VGA Graphics operators
+* Lazy compilation (Words are compiled if you try to execute something that isn't compiled yet)
+* Operators for selecting words and forcing them to compile
+* Indirect addresses for Fifth execution
+* Direct address support for playing with hardware (Don't have any idea what this will do under DosBox!)
+* All the normal Forth weirdness
 
 Anyway, for a number of years I couldn't put my hands on a copy of the 
 full Fifth environment.  This has really bothered me over the last few
