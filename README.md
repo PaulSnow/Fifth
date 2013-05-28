@@ -32,8 +32,8 @@ Features include:
 
 Anyway, for a number of years I couldn't put my hands on a copy of the 
 full Fifth environment.  This has really bothered me over the last few
-years, but not enough to mount all the old hard drives I have collected
-through the years.  
+years, but not enough to mount all the old hard drives I have collected... 
+(Hint:  I have lots of old hard drives!  "Toss the computer, keep the harddrive" -- the motto I live by!)  
 
 Looked first on the web, and found a number of Shareware versions on the.  
 Yes, you heard that right.  Fifth predates Open Source by a few years.
