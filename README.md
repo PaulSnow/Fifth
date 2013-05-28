@@ -1,7 +1,7 @@
 Fifth
 =====
 
-Professional Fifth
+Not just Fifth... Professional Fifth!  
 
 Cliff Click and I designed and built Fifth while in graduate school.  
 Fifth is a complete programming environment that is somewhat 32 bit Forth
