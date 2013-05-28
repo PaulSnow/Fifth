@@ -33,14 +33,14 @@ Features include:
 Anyway, for a number of years I couldn't put my hands on a copy of the 
 full Fifth environment.  This has really bothered me over the last few
 years, but not enough to mount all the old hard drives I have collected... 
-(Hint:  I have lots of old hard drives!  "Toss the computer, keep the hard drive" -- the motto I live by!)  
+(Hint:  I have lots of old hard drives!  "Toss the computer, keep the hard drive" 
+-- the motto I live by!)  
 
-Looked first on the web, and found a number of Shareware versions on the.  
+Looked first on the web, and found a number of Shareware versions.  Shareware... 
 Yes, you heard that right.  Fifth predates Open Source by a few years.
 
-But now I found a copy of the full version.  
-
-And I hereby release Fifth to the world!  
+But now, looking on my own drives, I have found a copy of the full version!  And I 
+hereby release Fifth to the world!  
 
 I'd like to say I am releasing Fifth as open source, but I can't because 
 I doubt the source exists any more.  If it does, it is on some even older 
@@ -48,8 +48,8 @@ drives and/or floppies that I haven't looked at yet.  But all
 the various Fifth programs that were distributed with Fifth are here.  And 
 I welcome the world to add to the Library of Open Sourced Fifth programs!
 
-It would be really cool if I could find the old version of Postscript begun
-on PC Fifth, but that is almost surly lost to history.
+((It would be really cool if I could find the old version of Postscript begun
+on PC Fifth, but that is almost surly lost to history.))
 
 Fifth runs just fine in DosBox, which provides an old style MS-DOS environment
 on nearly all hardware so you can run those old MS-DOS based games!
