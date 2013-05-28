@@ -4,8 +4,9 @@ Fifth
 Not just Fifth... Professional Fifth!  
 
 Cliff Click and I designed and built Fifth while in graduate school.
-Fifth is a complete programming environment that is somewhat 32 bit Forth
-based for PCs.  We later adapted it for 68000 based embedded systems 
+Fifth is a complete programming environment that is somewhat close to
+but not quite a 32 bit Forth.  Fifth was written for 8086/8087 based IBM
+compatiable PCs.  We later rewrote Fifth from the ground up for 68000 based embedded systems 
 to implement the first PostScript clone to Ship in a comerical Printer.
 (Printware's 720, in December of 1987)
 
