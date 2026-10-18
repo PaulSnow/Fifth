@@ -1,0 +1,31 @@
+SEARCH
+!0000040B
+\ ( addr1 -> addr2 addr3 8b ) Searches names for a match with addr1.  If found,
+\ displays the text in a popbox. Returns addr3, the address of the menu list
+\ and addr2, the address of the name in the names array.
+\ (or a null (zero) if the entry is not found).
+: search
+  names
+  ncnt @ 0 do			\ For each name in the names list
+    over over str= if
+      stack ab|bb		\ If found, use names addr's; they stay good.
+      names nlen @ + i 4 * + @	\ Get the file offset.
+      0 h @ seek drop drop	\ Seek to the text (assume success).
+      buff 3000 h @ read drop drop \ Read in the text (assume success).
+      buff 3000 0 scan buff +	\ Compute address of menu list.
+      swap 1+ buff boxit	\ Skip count byte of entry name, display box.
+      ?dup 0= if -1 endif exit	\ Insure I don't return a null here.
+    endif
+    dup c@ + 2 +		 \ If not found, increment to the next name.
+  loop
+  drop 1+			\ Drop names address; Print not found message.
+  " I could not find this entry" 1+ boxit drop 0 \ Return a null.
+;
+-*-
+v
+BUFF
+!00000040
+\ Create a buffer to hold a menu entry
+create buff 3000 allot
+-*-
+^

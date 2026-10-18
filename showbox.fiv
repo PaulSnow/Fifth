@@ -1,0 +1,4 @@
+create titlestr  72 c,  105 c,  33 c,  0 c,
+create bodystr   70 c, 105 c, 102 c, 116 c, 104 c, 32 c, 85 c, 73 c, 32 c, 116 c, 101 c, 115 c, 116 c, 33 c, 0 c,
+: showbox   5 5 55 20 4 1  titlestr  bodystr  popbox  ;
+showbox
